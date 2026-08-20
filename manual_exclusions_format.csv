@@ -1,0 +1,3 @@
+ykiho,list_ty,reason_code,reason_en,note_ko
+EXAMPLE_REPLACE_WITH_YOUR_OWN,mat_err,MATCH_ERR,Example row. Address matching linked the institution to a building that belongs to a different facility.,예시 행 - 직접 작성한 목록으로 교체
+EXAMPLE_REPLACE_WITH_YOUR_OWN_2,dist_err,DIST_OUTLIER,"Example row. Bed-based intensity is implausible for an operating institution, with the matching itself sound.",예시 행 - 직접 작성한 목록으로 교체

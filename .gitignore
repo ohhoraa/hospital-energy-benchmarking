@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Source data and everything derived from it.
+#   None of it is distributable. data_raw/ holds the delivered sources, the
+#   other two hold what the pipeline writes from them; the intermediate files
+#   still carry identifiers, addresses and matching metadata.
+#   The one exception is the metering-unit conversion table, which the README
+#   says ships with the code.
+# ---------------------------------------------------------------------------
+data_raw/*
+!data_raw/공통코드.xlsx
+data_prepared/
+data_output/
+figures/
+
+# ---------------------------------------------------------------------------
+# The real manual exclusion list holds ykiho values, which are pseudonymous
+# keys that can be resolved to named institutions through public
+# health-insurance data. Only the template is distributed.
+# ---------------------------------------------------------------------------
+manual_exclusions.csv
+manual_exclusions_test.csv
+
+# ---------------------------------------------------------------------------
+# Personal working notes kept alongside the code but not part of the release.
+# ---------------------------------------------------------------------------
+_*.md
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*
