@@ -102,10 +102,6 @@ def reset():
         _context[k] = None
 
 
-def get_context():
-    return dict(_context)
-
-
 # ============================================================
 # Label handling
 # ============================================================
@@ -122,13 +118,13 @@ def _clean_label(label):
 # ============================================================
 # Counting
 # ============================================================
-def log(df, pk_col, label, step=None):
+def log(df, pk_col, step):
     """Record the count at one step.
 
     pk_col : 'mgm_upper_bld_pk' (MB) / 'mgm_bld_pk' (SB) / 'ykiho'
-    label  : free text printed to the console
-    step   : row key of the table. Defaults to a cleaned `label`.
-             Labels that vary by scope must pass a normalised `step`.
+    step   : row key of the table. Labels that vary by scope (they embed the
+             primary-key name or the model_ty value) must be normalised by the
+             caller, otherwise one step is split across two rows.
     """
     global _seq
 
@@ -139,7 +135,7 @@ def log(df, pk_col, label, step=None):
         # No context = standalone execution; nothing is recorded.
         return
 
-    step_key = _clean_label(step if step is not None else label)
+    step_key = _clean_label(step)
 
     if step_key not in _records:
         _records[step_key] = {'section': current_section, 'step': step_key,
@@ -152,13 +148,17 @@ def log(df, pk_col, label, step=None):
                                     if pk_col in df.columns else None)
 
 
-def log_merge_step(section, label, total_inst, note=''):
-    """Add one row for the S3 concatenation / sub-period join results."""
+def log_merge_step(label, total_inst, note=''):
+    """Add one row for the S3 concatenation / sub-period join results.
+
+    Always recorded in the 'merge' section, which is where every caller of this
+    function belongs.
+    """
     global _seq
     if label not in _records:
         _records[label] = {'seq': _seq}
         _seq += 1
-    _records[label].update({'section': section, 'step': label,
+    _records[label].update({'section': 'merge', 'step': label,
                             'total_inst': total_inst, 'note': note})
 
 

@@ -13,8 +13,8 @@ What this script does
    used in the study, plus derived variables
 
 Outputs (written to data_prepared, read by S1_SB_merge.py / S1_MB_merge.py)
-  after_master-energy_{year}.csv / _{year_b}_{year_a}.csv
-  after_building-energy_{year}.csv / _{year_b}_{year_a}.csv
+  after_master-energy_{year_b}_{year_a}.csv
+  after_building-energy_{year_b}_{year_a}.csv
   after_master-cpm_{year_b}_{year_a}.csv
   after_building-cpm_{year_b}_{year_a}.csv
   after_weather.csv
@@ -38,7 +38,7 @@ Derived variables follow the released variable names:
   diet_cnt     dietitians counted for the meal-service supplement
   cook_cnt     cooks counted for the meal-service supplement
   estb_dd      opening date (datetime conversion of the source string)
-  hos_ty_eng   institution type abbreviation (GH/H/CH/KH/PH/DH/TH)
+  hos_ty_eng   institution type abbreviation (GH/H/CH/KH/DH/TH)
 
 Five HIRA sub-datasets are used:
 institutional information, facility information, medical equipment,
@@ -66,9 +66,15 @@ if 'data_dir' not in globals():
 if 'hira' not in globals():
     hira = 202003
 
+# Sub-periods to process, injected by run_all_merge.py. Every year that appears
+# in any pair is read individually first, then the pairs are joined; the CPM
+# fitting period of a pair is derived from it as x{year_b}01 - x{year_a}12.
+if 'year_pairs' not in globals():
+    year_pairs = [(2018, 2019), (2020, 2021)]
+YEARS = sorted({y for _pair in year_pairs for y in _pair})
+
 # HIRA release year used by the address matching table (hira=202003 -> 2020).
-if 'hira_base_yyyy' not in globals():
-    hira_base_yyyy = int(str(hira)[:4])
+hira_base_yyyy = int(str(hira)[:4])
 
 os.makedirs(data_dir, exist_ok=True)
 
@@ -76,7 +82,7 @@ os.makedirs(data_dir, exist_ok=True)
 # %% ==========================================================================
 # 1. Energy billing (master building / building)
 # =============================================================================
-def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
+def make_yearly_sum(df, df_cd, pk_out):
     """Monthly billing (long) -> annual totals (wide).
 
     Parameters
@@ -90,8 +96,6 @@ def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
     pk_out : 'mgm_bld_pk' (building) or 'mgm_upper_bld_pk' (master building).
              The master-building source uses the same key name as the building
              source, so it has to be renamed here to keep later merges apart.
-    dropna_group : groupby dropna option. False for the building source and
-             True for the master-building source, matching the source data.
     """
     df = df.copy()
 
@@ -102,13 +106,24 @@ def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
     for col in qty_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-    # The source mixes text and numeric code values.
-    df['engy_kind_cd'] = pd.to_numeric(df['engy_kind_cd'], errors='coerce')
-    df['unit_cd'] = pd.to_numeric(df['unit_cd'], errors='coerce')
+    # The source mixes text and numeric code values, so both code columns are
+    # coerced to the nullable integer type. Int64 rather than float is
+    # essential: the codes become column-name suffixes after the pivot below,
+    # and a float dtype would spell them '11.0' instead of '11', which no longer
+    # matches `need_cols` and would leave every energy column filled with zero.
+    _n_before = df['engy_kind_cd'].notna().sum()
+    df['engy_kind_cd'] = (pd.to_numeric(df['engy_kind_cd'], errors='coerce')
+                          .astype('Int64'))
+    df['unit_cd'] = pd.to_numeric(df['unit_cd'], errors='coerce').astype('Int64')
+    _n_coerced = int(_n_before - df['engy_kind_cd'].notna().sum())
+    if _n_coerced:
+        print(f'  [warning] {_n_coerced:,} row(s) dropped: engy_kind_cd is not '
+              f'numeric. Check the source before using these totals.')
 
     cd = df_cd.copy()
-    for c in ['engy_kind_cd', 'unit_cd', 'to_kwh']:
-        cd[c] = pd.to_numeric(cd[c], errors='coerce')
+    cd['to_kwh'] = pd.to_numeric(cd['to_kwh'], errors='coerce')
+    for c in ['engy_kind_cd', 'unit_cd']:
+        cd[c] = pd.to_numeric(cd[c], errors='coerce').astype('Int64')
 
     # Convert each metered unit to kWh.
     df = df.merge(cd, on=['engy_kind_cd', 'unit_cd'], how='left')
@@ -121,7 +136,7 @@ def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
     # Annual totals, then wide by energy source.
     yearly = (
         df.groupby(['mgm_bld_pk', 'engy_kind_cd', 'use_ym'],
-                   as_index=False, dropna=dropna_group)[qty_cols].sum()
+                   as_index=False)[qty_cols].sum()
     )
     yearly = yearly.pivot_table(
         index='mgm_bld_pk', columns=['engy_kind_cd'], values=qty_cols
@@ -150,11 +165,6 @@ def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
         yearly[f'use_qty_{k}'] = sum(yearly[f'use_qty_{k}_{e}'] for e in (11, 12, 13))
         yearly[f'use_qty_1st_{k}'] = sum(
             yearly[f'use_qty_{k}_{e}'] * PRI_FACTOR[e] for e in (11, 12, 13))
-
-    # Shares (%) of cooling / heating / baseload in the annual total.
-    yearly['clg_pct'] = yearly['use_qty_ec'] / yearly['use_qty_0'] * 100
-    yearly['htg_pct'] = yearly['use_qty_eh'] / yearly['use_qty_0'] * 100
-    yearly['base_pct'] = yearly['use_qty_eb'] / yearly['use_qty_0'] * 100
 
     cols = {
         'mgm_bld_pk_': pk_out,
@@ -187,10 +197,6 @@ def make_yearly_sum(df, df_cd, pk_out, dropna_group=True):
         'use_qty_eh_11': 'site_htg_e',
         'use_qty_eh_12': 'site_htg_g',
         'use_qty_eh_13': 'site_htg_h',
-
-        'clg_pct': 'site_clg_pct',
-        'htg_pct': 'site_htg_pct',
-        'base_pct': 'site_base_pct',
     }
     yearly = yearly.rename(columns=cols)
     yearly = yearly[list(cols.values())]
@@ -206,31 +212,32 @@ def add_year_suffix(df, year, pk_col):
     return df.rename(columns={c: f'{c}_{year}' for c in df.columns if c != pk_col})
 
 
-# Source scope -> (file-name token in the source data, output token, key, dropna)
+# Source scope -> (file-name token in the source data, output token, key)
 ENERGY_SCOPES = [
-    ('총괄표제부', 'master', 'mgm_upper_bld_pk', True),
-    ('표제부', 'building', 'mgm_bld_pk', False),
+    ('총괄표제부', 'master', 'mgm_upper_bld_pk'),
+    ('표제부', 'building', 'mgm_bld_pk'),
 ]
 
 
-def build_energy(src_token, out_token, pk_out, df_cd, dropna_group):
-    """Write the per-year wide files and the two-year pairs."""
+def build_energy(src_token, out_token, pk_out, df_cd):
+    """Write the two-year pair files S1 reads.
+
+    Each year in YEARS is summed separately and held in memory; only the pair
+    files are written, because those are what S1 opens.
+    """
     print(f'\n=== energy - {out_token} ===')
     ys = {}
-    for year in (2018, 2019, 2020, 2021):
+    for year in YEARS:
         raw = pd.read_csv(
             os.path.join(data_dir_in, f'전국-의료시설-{year}-{src_token}-사용량.csv'),
             encoding='cp949', delimiter='|',
         )
-        y = make_yearly_sum(raw, df_cd, pk_out=pk_out, dropna_group=dropna_group)
-        y = add_year_suffix(y, year, pk_col=pk_out)
-        y.to_csv(os.path.join(data_dir, f'after_{out_token}-energy_{year}.csv'),
-                 index=False, encoding='utf-8-sig')
-        ys[year] = y
+        y = make_yearly_sum(raw, df_cd, pk_out=pk_out)
+        ys[year] = add_year_suffix(y, year, pk_col=pk_out)
         print(f'  {out_token} {year} : {len(y):,} rows')
 
     # Two-year pair: only buildings billed in both years (inner join).
-    for year_b, year_a in [(2018, 2019), (2020, 2021)]:
+    for year_b, year_a in year_pairs:
         pair = (pd.merge(ys[year_b], ys[year_a], on=pk_out, how='inner')
                   .sort_values(pk_out).reset_index(drop=True))
         pair.to_csv(
@@ -243,8 +250,8 @@ def build_energy(src_token, out_token, pk_out, df_cd, dropna_group):
 df_cd = pd.read_excel(os.path.join(data_dir_in, '공통코드.xlsx'),
                       sheet_name='에너지 단위')
 
-for _src, _out, _pk, _dropna in ENERGY_SCOPES:
-    build_energy(_src, _out, pk_out=_pk, df_cd=df_cd, dropna_group=_dropna)
+for _src, _out, _pk in ENERGY_SCOPES:
+    build_energy(_src, _out, pk_out=_pk, df_cd=df_cd)
 
 
 # %% ==========================================================================
@@ -276,6 +283,12 @@ def processing_cpm(df, pk_out, date_s, date_e):
     df['date_e'] = df['date_e'].astype(str)
     df = df[(df['date_s'] == str(date_s)) & (df['date_e'] == str(date_e))].copy()
 
+    # Same reason as in make_yearly_sum: engy_kind_cd becomes a column-name
+    # suffix below, and a float dtype would spell it '11.0', which S3's
+    # sub-period regex (^(base)_\d+$) does not match.
+    df['engy_kind_cd'] = (pd.to_numeric(df['engy_kind_cd'], errors='coerce')
+                          .astype('Int64'))
+
     ren = {'mgm_bld_pk': pk_out} if pk_out != 'mgm_bld_pk' else {}
 
     df_val = df.filter(items=COLS_CPM_VAL).rename(columns=ren)
@@ -296,11 +309,10 @@ def processing_cpm(df, pk_out, date_s, date_e):
     return pd.merge(df_info, df_pivot, on=pk_out, how='inner')
 
 
-for (year_b, year_a), (ds, de) in {
-    (2018, 2019): ('x201801', 'x201912'),
-    (2019, 2020): ('x201901', 'x202012'),
-    (2020, 2021): ('x202001', 'x202112'),
-}.items():
+# The fitting period of a sub-period runs from January of the earlier year to
+# December of the later one, which the source labels x{YYYYMM}.
+for year_b, year_a in year_pairs:
+    ds, de = f'x{year_b}01', f'x{year_a}12'
     processing_cpm(df_cpm_u, 'mgm_upper_bld_pk', ds, de).to_csv(
         os.path.join(data_dir, f'after_master-cpm_{year_b}_{year_a}.csv'),
         index=False, encoding='utf-8-sig')
@@ -353,7 +365,7 @@ df_w_y.rename(columns={'kma_obsrvn_cd_': 'kma_obsrvn_cd',
 weather = pd.merge(df_sta, df_w_y, on='kma_obsrvn_cd', how='left')
 
 _want = (['sigungu_cd', 'bjdong_cd', 'kma_obsrvn_cd', 'kma_obsrvn_nm']
-         + [f'{k}_{y}' for k in ('cdd', 'hdd') for y in range(2018, 2024)])
+         + [f'{k}_{y}' for k in ('cdd', 'hdd') for y in YEARS])
 _miss = [c for c in _want if c not in weather.columns]
 if _miss:
     print(f'[weather] columns absent from the source, dropped: {_miss}')
@@ -589,22 +601,28 @@ _HIRA_FILES = {
 }
 
 
-def add_bed_cnt_from_kor(df, expected=13, label='facility information'):
+#   The facility-information release carries 13 Korean bed columns.
+_BED_COL_EXPECTED = 13
+
+
+def add_bed_cnt_from_kor(df, label):
     """Build bed_cnt from the Korean headings, before renaming.
 
     Bed column headings differ slightly between HIRA releases, so summing every
     heading that ends in the Korean word for "number of beds" is robust to
-    those variants in a way that per-column mapping is not. The expected count
-    is asserted so that a change in the source cannot pass silently.
+    those variants in a way that per-column mapping is not. The count is
+    checked against _BED_COL_EXPECTED so that a change in the source cannot
+    pass silently.
     """
     bed_kor = [c for c in df.columns if str(c).strip().endswith('병상수')]
     print(f'[{label}] {len(bed_kor)} bed columns detected: {bed_kor}')
-    if len(bed_kor) != expected:
+    if len(bed_kor) != _BED_COL_EXPECTED:
         raise KeyError(
-            f'{label}: found {len(bed_kor)} bed columns (expected {expected}).\n'
+            f'{label}: found {len(bed_kor)} bed columns '
+            f'(expected {_BED_COL_EXPECTED}).\n'
             f'  detected = {bed_kor}\n'
-            f'  -> if the release changed, adjust `expected` and check the '
-            f'documented definition of bed_cnt as well.'
+            f'  -> if the release changed, adjust _BED_COL_EXPECTED and check '
+            f'the documented definition of bed_cnt as well.'
         )
     df = df.copy()
     df['bed_cnt'] = df[bed_kor].apply(pd.to_numeric, errors='coerce').sum(axis=1)
@@ -616,7 +634,7 @@ for key, (fname, kor2eng, label) in _HIRA_FILES.items():
     _d = pd.read_csv(os.path.join(data_dir_in, fname), encoding='cp949',
                      low_memory=False)
     if key == 'fac1':
-        _d = add_bed_cnt_from_kor(_d, expected=13, label=label)
+        _d = add_bed_cnt_from_kor(_d, label=label)
     raw[key] = rename_to_source(_d, kor2eng, label)
     print(f'[HIRA] {label}: {len(raw[key]):,} rows, {raw[key].shape[1]} cols')
 
@@ -637,7 +655,7 @@ print(f'[HIRA] institutional information joined to the matching table '
 # -----------------------------------------------------------------------------
 # 4-4. Opening date -> datetime (estb_dd / is_estb_dd_valid)
 # -----------------------------------------------------------------------------
-def convert_estb_dd(df, src='estb_dd_raw'):
+def convert_estb_dd(df):
     """Convert the opening date (YYYYMMDD) to datetime.
 
     Values with a broken month or day (e.g. 19850000) keep the year and are set
@@ -645,10 +663,9 @@ def convert_estb_dd(df, src='estb_dd_raw'):
     'estb_dd < 2018-01-01', so year precision is sufficient and the row does
     not have to be discarded.
     """
-    s = df[src].astype('Int64').astype(str)
+    s = df['estb_dd_raw'].astype('Int64').astype(str)
     s8 = s[s.str.len() == 8]
 
-    year = s8.str[:4].astype(int)
     month = s8.str[4:6].astype(int)
     day = s8.str[6:8].astype(int)
     ok_mask = month.between(1, 12) & day.between(1, 31)
@@ -656,12 +673,17 @@ def convert_estb_dd(df, src='estb_dd_raw'):
     estb = pd.Series(index=s.index, dtype='datetime64[ns]')
     is_valid = pd.Series(False, index=s.index)
 
-    ok = s8[ok_mask]
-    estb.loc[ok.index] = pd.to_datetime(ok, format='%Y%m%d')
-    is_valid.loc[ok.index] = True
+    # The 1-31 range check cannot reject a day that is invalid for its own month
+    # (20190230, 20190431), so the conversion is coerced and anything it returns
+    # as NaT joins the broken-date branch below instead of raising.
+    _conv = pd.to_datetime(s8[ok_mask], format='%Y%m%d',
+                           errors='coerce').dropna()
+    estb.loc[_conv.index] = _conv
+    is_valid.loc[_conv.index] = True
 
-    bad = s8[~ok_mask]
-    estb.loc[bad.index] = pd.to_datetime(bad.str[:4], format='%Y')
+    bad = s8.loc[s8.index.difference(_conv.index)]
+    estb.loc[bad.index] = pd.to_datetime(bad.str[:4], format='%Y',
+                                         errors='coerce')
 
     df['estb_dd'] = estb
     df['is_estb_dd_valid'] = is_valid
@@ -734,7 +756,6 @@ df_oft = (df_fac2.groupby(['ykiho', 'oft_cd'])['oft_cnt'].sum().reset_index()
           .fillna(0).reset_index())
 df_oft.columns.name = None
 df_oft = df_oft.rename(columns={'B108': 'ct_cnt', 'B301': 'mri_cnt'})
-df_oft = df_oft.merge(df_fac1[['ykiho']], on='ykiho', how='right')
 
 # Meal-service staffing by staff type -> wide.
 df_meal = (df_fac3.pivot_table(index='ykiho', columns='ty_cd_nm',
@@ -768,8 +789,17 @@ print(f'[HIRA] columns dropped from the institutional information: {_dup}')
 df_fac = (df_fac1
           .merge(df_fac0.drop(columns=_dup), on='ykiho', how='left')
           .fillna({'match_mgm_bld_pks': 'nan', 'match_mgm_upper_bld_pks': 'nan'}))
-df_fac = df_fac.merge(df_oft, on='ykiho', how='left').fillna(0)
-df_fac = df_fac.merge(df_meal, on='ykiho', how='left').fillna(0).reset_index(drop=True)
+
+# An institution absent from the equipment or meal-service table owns none of
+# that equipment and claims no meal-service surcharge, so its counts are 0
+# rather than missing. The fill is restricted to the columns each merge brings
+# in: a frame-wide fillna(0) would also turn a missing opening date into the
+# integer 0 and a missing institution name into 0.
+for _side in (df_oft, df_meal):
+    _new = [c for c in _side.columns if c != 'ykiho']
+    df_fac = df_fac.merge(_side, on='ykiho', how='left')
+    df_fac[_new] = df_fac[_new].fillna(0)
+df_fac = df_fac.reset_index(drop=True)
 df_fac = df_fac.merge(df_dept, on='ykiho', how='left').reset_index(drop=True)
 
 print(f'[HIRA] merged: {len(df_fac):,} rows, {df_fac.shape[1]} cols')
@@ -800,7 +830,7 @@ df_fac['hos_ty_eng'] = df_fac['cl_cd_nm'].map(HOS_TY_LABEL_MAP)
 _unmapped_ty = df_fac.loc[df_fac['hos_ty_eng'].isna(), 'cl_cd_nm'].unique()
 if len(_unmapped_ty):
     print(f'[warning] institution types not mapped to hos_ty_eng: '
-          f'{list(_unmapped_ty)}')
+          f'{list(_unmapped_ty)} -> extend HOS_TY_LABEL_MAP in common.py')
 
 
 # -----------------------------------------------------------------------------
@@ -810,7 +840,3 @@ df_fac.to_csv(os.path.join(data_dir, f'after_hira_{hira}.csv'),
               index=False, encoding='utf-8-sig')
 print(f'\n[save] after_hira_{hira}.csv  '
       f'({len(df_fac):,} rows, {df_fac.shape[1]} cols)')
-
-fac_ind = df_fac[df_fac['match_level'] == 'CASE102']   # building 1:1     -> SB
-fac_cmp = df_fac[df_fac['match_level'] == 'CASE101']   # master 1:N       -> MB
-print(f'  CASE102(SB) = {len(fac_ind):,} / CASE101(MB) = {len(fac_cmp):,}')

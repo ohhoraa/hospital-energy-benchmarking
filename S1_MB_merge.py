@@ -25,7 +25,7 @@ import pandas as pd
 from common import (
     MODEL_TY_MB_SI, MODEL_TY_MB_MI, YKIHO,
     SCOPE_CFG, step_filename,
-    add_totarea_abs_error, add_ct_mri_cnt,
+    add_totarea_abs_error,
     add_en_ty_and_flag, add_comp_ratio_flag,
 )
 
@@ -110,8 +110,8 @@ df_up_bld = df_up_bld.loc[:, col_up_bld]
 # =============================================================================
 df_bld = raw_bld.copy()
 col_bld = [
-    'mgm_upper_bld_pk', 'mgm_bld_pk', 'regstr_gb_cd',
-    'totarea', 'main_purps_cd',
+    'mgm_upper_bld_pk', 'mgm_bld_pk',
+    'totarea',
     'grnd_flr_cnt', 'ugrnd_flr_cnt',
 ]
 df_bld = df_bld.loc[:, col_bld]
@@ -197,8 +197,6 @@ df_merge0 = merge_upbld(merge0, cpm_pair, energy_pair, weather,
 hos_per_uppk = df_merge0.groupby('mgm_upper_bld_pk')[YKIHO].nunique()
 df_merge0['hos_per_uppk'] = df_merge0['mgm_upper_bld_pk'].map(hos_per_uppk)
 
-df_merge0 = add_ct_mri_cnt(df_merge0)
-
 df_merge0['model_ty'] = np.where(df_merge0['hos_per_uppk'] == 1,
                                  MODEL_TY_MB_SI,
                                  MODEL_TY_MB_MI)
@@ -210,8 +208,11 @@ df_merge0['model_ty'] = np.where(df_merge0['hos_per_uppk'] == 1,
 # Summed floor area of the member records. S2 compares it with the master-record
 # value to set totarea_adj.
 bld_area_total = df_bld.groupby('mgm_upper_bld_pk')['totarea'].sum()
+#   Kept as a float: where S2 adopts this value as totarea_adj it becomes the
+#   released gfa, and casting to int would silently truncate the sub-square-metre
+#   part. SB keeps its floor area as a float for the same reason.
 df_merge0['bld_area_total'] = (df_merge0['mgm_upper_bld_pk']
-                               .map(bld_area_total).fillna(0).astype(int))
+                               .map(bld_area_total).fillna(0).astype(float))
 
 # Absolute relative error between gfa and gfa_r (master-record values).
 df_merge0 = add_totarea_abs_error(df_merge0)
@@ -222,7 +223,18 @@ flr_tot_area = _g['flr_tot_area'].sum()            # incl. parking
 flr_net_area = _g['flr_net_area'].sum()            # pu_rat denominator
 flr_parking_area = _g['flr_parking_area'].sum()    # parking
 flr_hos_area = _g['flr_hos_area'].sum()            # medical use
-flr_main_purps_rat = ((flr_hos_area / flr_net_area) * 100).fillna(0)
+#   Undefined (NaN) when the summed denominator is not positive, matching the
+#   guard in pu_rat.py. Without it a master record whose member records are all
+#   parking would divide by zero: pandas returns inf for a non-zero numerator,
+#   fillna does not catch inf, and inf passes the pu_rat >= 75 filter in S2.
+flr_main_purps_rat = pd.Series(
+    np.where(flr_net_area > 0, flr_hos_area / flr_net_area * 100, np.nan),
+    index=flr_net_area.index,
+)
+_n_no_net = int((flr_net_area <= 0).sum())
+if _n_no_net:
+    print(f'[check] {_n_no_net:,} master record(s) with a summed flr_net_area '
+          f'<= 0 -> flr_main_purps_rat = NaN (excluded by the pu_rat filter)')
 
 df_merge0['flr_tot_area'] = df_merge0['mgm_upper_bld_pk'].map(flr_tot_area)
 df_merge0['flr_net_area'] = df_merge0['mgm_upper_bld_pk'].map(flr_net_area)

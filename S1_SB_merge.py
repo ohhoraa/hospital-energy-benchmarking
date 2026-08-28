@@ -23,7 +23,7 @@ import pandas as pd
 
 from common import (
     MODEL_TY_SB_SI, MODEL_TY_SB_MI, YKIHO, SCOPE_CFG, step_filename,
-    add_totarea_abs_error, add_ct_mri_cnt,
+    add_totarea_abs_error,
     add_en_ty_and_flag, add_comp_ratio_flag,
 )
 
@@ -181,8 +181,6 @@ df_merge0 = merge_bld(merge0, cpm_pair, energy_pair, weather, on_key='mgm_bld_pk
 # Institutions per building record -> basis for SB-SI / SB-MI.
 hos_per_pk = df_merge0.groupby('mgm_bld_pk')[YKIHO].nunique()
 df_merge0['hos_per_pk'] = df_merge0['mgm_bld_pk'].map(hos_per_pk)
-
-df_merge0 = add_ct_mri_cnt(df_merge0)
 
 # Building-institution configuration.
 df_merge0['model_ty'] = np.where(df_merge0['hos_per_pk'] == 1,

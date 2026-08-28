@@ -130,7 +130,6 @@ for year_b, year_a in year_pairs:
 
         if _USE_COUNTER and step == 'after_outlier':
             counter.log_merge_step(
-                section='merge',
                 label=f'SB+MB concatenation ({pair})',
                 total_inst=merged[YKIHO].nunique(dropna=True),
                 note='row-wise concatenation of the two scopes',
@@ -202,7 +201,6 @@ for step in STEPS:
 
     if _USE_COUNTER and step == 'after_outlier':
         counter.log_merge_step(
-            section='merge',
             label='2018-2019 inner join 2020-2021',
             total_inst=merged[YKIHO].nunique(dropna=True),
             note='inner join on the institution key',
@@ -216,9 +214,9 @@ for step in STEPS:
 #   - Renamed for the release: gfa, gfa_r, pu_rat, footprint_area, fa_rat,
 #     open_ymd, doctor_cnt.
 #   - Everything else keeps its source name.
-#   - Parking area, the lift variables and cl_cd_nm are not released
-#     (cl_cd_nm is the Korean-language institution type name and maps one to
-#     one onto hos_ty_eng, so it carries no extra information).
+#   - cl_cd_nm is not released: it is the Korean-language institution type
+#     name and maps one to one onto hos_ty_eng, so it carries no extra
+#     information.
 #   - Identifiers, addresses, coordinates and matching metadata are not
 #     released, so that institutions cannot be identified.
 print(f'\n{"=" * 70}\n[S3] Part C: release view\n{"=" * 70}')
@@ -282,14 +280,14 @@ else:
     print(f'  variable types confirmed ({_n_types})')
 
 
-def build_release_view(df, mapping=RELEASE_COLS):
-    """Keep the mapped columns and rename them to the released names."""
-    missing = [c for c in mapping if c not in df.columns]
+def build_release_view(df):
+    """Keep the RELEASE_COLS columns and rename them to the released names."""
+    missing = [c for c in RELEASE_COLS if c not in df.columns]
     if missing:
         print(f'[release] {len(missing)} column(s) absent from the input and '
               f'therefore omitted: {missing}')
-    keep = [c for c in mapping if c in df.columns]
-    return df[keep].rename(columns={k: mapping[k] for k in keep})
+    keep = [c for c in RELEASE_COLS if c in df.columns]
+    return df[keep].rename(columns={k: RELEASE_COLS[k] for k in keep})
 
 
 _fps = [os.path.join(data_dir, final_filename('after_outlier', date, hira,
@@ -336,5 +334,3 @@ else:
     print(f'\n{"=" * 70}')
     print(f'[check] final N = {n_rel:,}')
     print(f'{"=" * 70}')
-
-    df_release.info()

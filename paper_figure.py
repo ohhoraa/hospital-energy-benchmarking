@@ -31,7 +31,6 @@ Figure 5 - bed-based energy use intensity against gross floor area, by
 
 import os
 
-import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -41,7 +40,7 @@ from matplotlib.offsetbox import AnnotationBbox, DrawingArea
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
 
 from common import (MAIN_PURPS_CDS, YKIHO, SCOPE_CFG, final_filename,
-                   manual_exclusion_types)
+                   manual_exclusion_types, totarea_adj)
 
 # Type sizes. The figures are reduced heavily when placed in a two-column
 # layout, so everything is set well above the matplotlib defaults. The
@@ -84,14 +83,10 @@ if 'date' not in globals():
     date = 260820
 if 'hira' not in globals():
     hira = 202003
-if 'year_pairs' not in globals():
-    year_pairs = [(2018, 2019), (2020, 2021)]
-if 'save_f' not in globals():
-    save_f = True
-
-# The sub-period and the year the figures are drawn for.
+# The sub-period and the year the figures are drawn for, set by
+# FIG_PAIR / FIG_YEAR in run_all_merge.py.
 if 'fig_pair' not in globals():
-    fig_pair = year_pairs[0]          # (2018, 2019)
+    fig_pair = (2018, 2019)
 if 'fig_year' not in globals():
     fig_year = fig_pair[1]            # 2019
 
@@ -143,9 +138,8 @@ class FixedExpFormatter(ScalarFormatter):
     to 1e4 puts them on the same units.
     """
 
-    def __init__(self, exp, **kw):
-        kw.setdefault('useMathText', False)   # plain '1e4', as on the inset
-        super().__init__(**kw)
+    def __init__(self, exp):
+        super().__init__(useMathText=False)   # plain '1e4', as on the inset
         self._fixed_exp = exp
         self.set_scientific(True)
         self.set_powerlimits((0, 0))          # always use the exponent form
@@ -154,36 +148,11 @@ class FixedExpFormatter(ScalarFormatter):
         self.orderOfMagnitude = self._fixed_exp
 
 
-def set_fixed_exp(ax, axis='y', exp=4, fontsize=None):
-    """Pin the exponent of an axis label."""
-    target = ax.yaxis if axis == 'y' else ax.xaxis
+def set_fixed_exp(ax, exp, fontsize):
+    """Pin the exponent of the y-axis label."""
+    target = ax.yaxis
     target.set_major_formatter(FixedExpFormatter(exp))
-    if fontsize is not None:
-        target.get_offset_text().set_fontsize(fontsize)
-
-
-def _totarea_adj(df, tot_col='totarea', bld_sum_col='bld_area_total',
-                 model_col='model_ty', gap=500):
-    """Corrected gross floor area, the same rule S2_clean.py applies.
-
-    For MB the master-record value is compared with the sum of the member
-    building records; a gap of at least `gap` m2 (about one building's worth)
-    means the two totals cover different sets of buildings, so the larger (more
-    complete) value is taken. SB holds a single record and has nothing to
-    compare against, so the raw value is kept.
-
-    Kept here rather than in common.py because this script is not part of the
-    distributed pipeline.
-    """
-    tot = pd.to_numeric(df[tot_col], errors='coerce')
-    is_mb = df[model_col].astype(str).str.startswith('MB')
-    if bld_sum_col in df.columns:
-        bld = pd.to_numeric(df[bld_sum_col], errors='coerce')
-    else:
-        bld = pd.Series(np.nan, index=df.index)
-
-    use_max = is_mb & (tot - bld).abs().ge(gap)
-    return np.where(use_max, np.maximum(tot, bld), tot)
+    target.get_offset_text().set_fontsize(fontsize)
 
 
 def draw_eui_refs(ax, euis, xmax, ymax, fontsize, linewidth=1.0):
@@ -206,10 +175,12 @@ def draw_eui_refs(ax, euis, xmax, ymax, fontsize, linewidth=1.0):
 
 
 def save_fig(fname):
+    """Write the current figure. Whether this step runs at all is
+    decided by RUN_* in run_all_merge.py, so there is no per-figure
+    switch here."""
     out = os.path.join(figure_dir, fname)
-    if save_f:
-        plt.savefig(out, dpi=300, bbox_inches='tight')
-        print(f'[saved] {out}')
+    plt.savefig(out, dpi=300, bbox_inches='tight')
+    print(f'[saved] {out}')
     plt.close()
 
 
@@ -329,7 +300,7 @@ _style4(ax)
 
 # Both y axes of (b) are pinned to 1e4. Left to itself the outer panel would
 # read 1e5 against the inset's 1e4, and the two could not be compared by eye.
-set_fixed_exp(ax, axis='y', exp=4, fontsize=FS_TICK)
+set_fixed_exp(ax, exp=4, fontsize=FS_TICK)
 
 # inset: upper right of (b), enlarging the lower tail where the two lowest
 # reference lines separate. It is opaque and above the points it covers.
@@ -352,7 +323,7 @@ axi.xaxis.set_major_locator(MaxNLocator(nbins=4))
 axi.yaxis.set_major_locator(MaxNLocator(nbins=4))
 axi.tick_params(labelsize=FS_INSET_TICK)
 axi.xaxis.get_offset_text().set_fontsize(FS_INSET_TICK)
-set_fixed_exp(axi, axis='y', exp=4, fontsize=FS_INSET_TICK)
+set_fixed_exp(axi, exp=4, fontsize=FS_INSET_TICK)
 # The label sits in the top-right corner, the only part of the inset that no
 # reference line or point runs through.
 axi.text(0.98, ENERGY_MIN / YI_MAX + 0.02, f'{ENERGY_MIN:,} kWh',
@@ -397,12 +368,10 @@ print(f'\n[fig5] input {os.path.basename(_fp_fin)}: '
       f'{d5[YKIHO].nunique():,} institutions')
 
 # The manually excluded institutions are no longer in the final file, so they
-# are taken from the before_preprocessing file and appended for marking only.
-#   Only the dist_err entries are marked. They are the ones this figure is the
-#   view for: the matching is sound, so the point is where the record places it,
-#   and that is what the marking is meant to show. The mat_err entries were
-#   found on the matching itself, not here, and their coordinates carry no
-#   meaning on these axes.
+# are read back from before_preprocessing and appended for marking only.
+#   dist_err only: those are the points this figure is about - the matching is
+#   sound, so the plotted position is itself the finding. A mat_err institution
+#   was found on the matching, so its coordinates here mean nothing.
 _po = manual_exclusion_types(exclusion_csv)['dist_err']
 _fp_pre = os.path.join(data_dir,
                        final_filename('before_preprocessing', date, hira, 'all'))
@@ -411,7 +380,7 @@ if _po and os.path.exists(_fp_pre):
     _pre = pd.read_excel(_fp_pre)
     po_rows = _pre[_pre[YKIHO].astype(str).isin(_po)].copy()
     if len(po_rows):
-        po_rows['totarea_adj'] = _totarea_adj(po_rows)
+        po_rows['totarea_adj'] = totarea_adj(po_rows)
 print(f'[fig5] manually excluded institutions added back for marking: '
       f'{po_rows[YKIHO].nunique() if len(po_rows) else 0}')
 

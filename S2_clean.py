@@ -32,7 +32,7 @@ import pandas as pd
 from common import (
     MAIN_PURPS_CDS, YKIHO, SCOPE_CFG, step_filename,
     make_counter,
-    clean_bc_rat, grnd_flr_invalid,
+    clean_bc_rat, grnd_flr_invalid, totarea_adj,
     load_manual_exclusions, drop_manual_exclusions,
 )
 
@@ -67,7 +67,6 @@ if 'exclusion_csv' not in globals():
 
 cfg = SCOPE_CFG[scope]
 PK = cfg['pk_col']            # key used for counting
-GFA = cfg['gfa_col']          # denominator of the area_bed check (totarea_adj)
 MODEL_TY = cfg['model_ty']    # the single-institution configuration retained
 
 print(f'\n{"=" * 70}\n[S2] scope={scope}  {year_b}_{year_a}\n{"=" * 70}')
@@ -225,7 +224,7 @@ print('\n##### screening: building register #####')
 
 # Building coverage ratio: above 100% recompute from footprint / lot area, and
 # drop the row if it still exceeds 100%.
-df = clean_bc_rat(df, verbose=True)
+df = clean_bc_rat(df)
 print_counts(df, '--- bc_rat <= 100 after correction')
 
 # Above-ground floor count: drop when <= 0 or missing.
@@ -254,20 +253,10 @@ print(f'    [check] records removed by the floor-count check = '
 df = df[df['totarea_abs_error'] < 0.99]
 print_counts(df, '--- |gfa - gfa_r| / gfa < 0.99')
 
-# Corrected gross floor area (totarea_adj).
-#   For MB the master-record floor area is compared with the sum of the member
-#   building records; a gap of at least 500 m2 (about one building's worth)
-#   means the two totals cover different sets of buildings, so the larger (more
-#   complete) value is taken. SB holds a single record and has nothing to
-#   compare against, so the raw value is kept.
-if scope == 'MB':
-    _tot = pd.to_numeric(df['totarea'], errors='coerce')
-    _bld = pd.to_numeric(df['bld_area_total'], errors='coerce')
-    _use_max = (_tot - _bld).abs().ge(500)
-    df['totarea_adj'] = np.where(_use_max, np.maximum(_tot, _bld), _tot)
-    print(f'--- totarea_adj corrected on {int(_use_max.sum())} rows')
-else:
-    df['totarea_adj'] = pd.to_numeric(df['totarea'], errors='coerce')
+# Corrected gross floor area. The rule lives in common.totarea_adj so that
+# paper_figure.py applies exactly the same one to the institutions it adds back
+# for marking.
+df['totarea_adj'] = totarea_adj(df)
 
 print('\n##### screening: HIRA #####')
 
@@ -279,7 +268,7 @@ print('\n##### screening: HIRA #####')
 #   governed by the Mental Health Act rule instead.
 df = df[
     (df['hos_ty_eng'] == 'CH') |
-    ((df['hos_ty_eng'] != 'CH') & ((df[GFA] / df['bed_cnt']) >= 9.45))
+    ((df['hos_ty_eng'] != 'CH') & ((df['totarea_adj'] / df['bed_cnt']) >= 9.45))
 ]
 print_counts(df, '--- area_bed >= 9.45 (except CH)')
 
@@ -357,8 +346,7 @@ _list_ty_map.update({y: 'dist_err' for y in dist_err_list})
 
 df_final = drop_manual_exclusions(df_screened, mat_err_list + dist_err_list,
                                   print_counts=print_counts,
-                                  list_ty_map=_list_ty_map,
-                                  step='after manual exclusion')
+                                  list_ty_map=_list_ty_map)
 
 df_final.to_excel(os.path.join(data_dir, _fn('after_outlier')), index=False)
 print(f"[save] {_fn('after_outlier')}")

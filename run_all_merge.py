@@ -83,15 +83,20 @@ YEAR_PAIRS = [
     (2020, 2021),
 ]
 
+# Sub-period and year the paper figures are drawn for. Figures 4 and 5 show a
+# single year, so this picks which one; it does not affect the dataset.
+FIG_PAIR = YEAR_PAIRS[0]     # (2018, 2019)
+FIG_YEAR = FIG_PAIR[1]       # 2019
+
 # pu_rat reads the ~4 GB floor summary source, so it only has to run when that
 # source changes. S1 fails if its output is absent.
-RUN_PU_RAT = False
+RUN_PU_RAT = True
 
-RUN_S0 = False
-RUN_S1 = False
-RUN_S2 = False
-RUN_S3 = False
-RUN_COUNT_EXPORT = False
+RUN_S0 = True
+RUN_S1 = True
+RUN_S2 = True
+RUN_S3 = True
+RUN_COUNT_EXPORT = True
 RUN_PAPER_FIGURE = True
 RUN_EDA_VALIDATION = True
 
@@ -99,9 +104,9 @@ RUN_EDA_VALIDATION = True
 #   Always written, because the stages read them from one another:
 #     before_preprocessing (S1) / after_outlier (S2) / final_* (S3 A and B)
 #   Everything below is optional.
-SAVE_RELEASE_CSV = False        # hospital_energy_benchmarking_{N}.csv
-SAVE_COLUMN_DICT = False        # column_dictionary_{N}.xlsx
-SAVE_PU_RAT_LOG = False         # {DATE} pu_rat_log.txt
+SAVE_RELEASE_CSV = True         # hospital_energy_benchmarking_{N}.csv
+SAVE_COLUMN_DICT = True         # column_dictionary_{N}.xlsx
+SAVE_PU_RAT_LOG = True          # {DATE} pu_rat_log.txt
 
 # Step-count table.
 COUNT_FILE = os.path.join(DATA_OUTPUT, 'preprocessing_counts.xlsx')
@@ -114,7 +119,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import counter        # noqa: E402
-from common import SCOPES   # noqa: E402
+from common import SCOPES, load_manual_exclusions_table   # noqa: E402
 
 
 # -------------------------------------------------------------------------
@@ -230,6 +235,36 @@ def preflight_data():
     print(f'  all {sum(len(v) for v in req.values())} source file(s) present')
 
 
+def preflight_exclusions():
+    """Report the manual exclusion list before anything runs.
+
+    Unlike the data_raw/ sources, this file is one the user writes by hand
+    (README explains how), so it is the one most easily forgotten. S2 and
+    paper_figure both raise on it, hours into a run, so it is checked here and
+    its contents summarised - how many institutions are about to be removed and
+    under which list_ty - so that an unintended list is visible up front.
+    """
+    if not (RUN_S2 or RUN_PAPER_FIGURE):
+        return
+
+    print(f'\n[preflight] manual exclusion list')
+    if not os.path.exists(EXCLUSION_CSV):
+        print(f'  [MISSING] {EXCLUSION_CSV}', flush=True)
+        print(f'  -> copy manual_exclusions_format.csv to '
+              f'manual_exclusions.csv, replace the example rows with your own '
+              f'list, and re-run (see README.md).', flush=True)
+        raise FileNotFoundError(
+            f'Manual exclusion list not found: {EXCLUSION_CSV}')
+
+    ex = load_manual_exclusions_table(EXCLUSION_CSV)
+    n_inst = ex['ykiho'].nunique()
+    print(f'  [ok ] {os.path.basename(EXCLUSION_CSV)}: {len(ex)} row(s), '
+          f'{n_inst} institution(s) to be removed')
+    for t, n in ex['list_ty'].value_counts().items():
+        print(f'          {t}: {n} row(s), '
+              f'{ex.loc[ex["list_ty"] == t, "ykiho"].nunique()} institution(s)')
+
+
 # -------------------------------------------------------------------------
 # pu_rat. Floor summary -> primary use area ratio (S1 input)
 # -------------------------------------------------------------------------
@@ -265,6 +300,7 @@ def run_s0():
         'data_dir_in': DATA_RAW,
         'data_dir': DATA_PREPARED,
         'hira': HIRA,
+        'year_pairs': YEAR_PAIRS,
     })
     print(f'[S0] done ({time.time() - t0:.1f}s)', flush=True)
 
@@ -389,10 +425,18 @@ def run_s2():
 # -------------------------------------------------------------------------
 # S3. Combination and release view
 # -------------------------------------------------------------------------
+# Path of the released CSV, captured from S3 below. The validation figures are
+# drawn from this exact file rather than from whatever the output folder holds,
+# so a leftover CSV from an earlier run with a different N cannot be validated
+# by mistake.
+_RELEASE_CSV = None
+
+
 def run_s3():
+    global _RELEASE_CSV
     _print_banner('STEP S3: combination and release view')
     t0 = time.time()
-    _run_script('S3_combine.py', {
+    _g = _run_script('S3_combine.py', {
         'data_dir': DATA_PREPARED,
         'output_dir': DATA_OUTPUT,
         'date': DATE,
@@ -401,6 +445,7 @@ def run_s3():
         'save_release_csv': SAVE_RELEASE_CSV,
         'save_column_dict': SAVE_COLUMN_DICT,
     })
+    _RELEASE_CSV = _g.get('rel_csv')
     print(f'[S3] done ({time.time() - t0:.1f}s)', flush=True)
 
 
@@ -421,20 +466,16 @@ def run_paper_figure():
     _force_agg('paper_figure')
 
     t0 = time.time()
-    try:
-        _run_script('paper_figure.py', {
-            'data_dir': DATA_PREPARED,
-            'figure_dir': FIGURE_DIR,
-            'exclusion_csv': EXCLUSION_CSV,
-            'date': DATE,
-            'hira': HIRA,
-            'year_pairs': YEAR_PAIRS,
-            'save_f': True,
-        })
-    except Exception as e:
-        print(f'[paper_figure] failed: {e}', flush=True)
-    else:
-        print(f'[paper_figure] done ({time.time() - t0:.1f}s)', flush=True)
+    _run_script('paper_figure.py', {
+        'data_dir': DATA_PREPARED,
+        'figure_dir': FIGURE_DIR,
+        'exclusion_csv': EXCLUSION_CSV,
+        'date': DATE,
+        'hira': HIRA,
+        'fig_pair': FIG_PAIR,
+        'fig_year': FIG_YEAR,
+    })
+    print(f'[paper_figure] done ({time.time() - t0:.1f}s)', flush=True)
 
 
 def run_eda_validation():
@@ -442,17 +483,20 @@ def run_eda_validation():
     _print_banner('Technical validation figures')
     _force_agg('eda_validation')
 
+    if _RELEASE_CSV is None:
+        raise RuntimeError(
+            'The released CSV was not written in this run, so there is '
+            'nothing to validate.\n'
+            '  -> set RUN_S3 = True and SAVE_RELEASE_CSV = True, or switch '
+            'RUN_EDA_VALIDATION off.'
+        )
+
     t0 = time.time()
-    try:
-        _run_script('eda_validation.py', {
-            'output_dir': DATA_OUTPUT,
-            'figure_dir': FIGURE_DIR,
-            'save_f': True,
-        })
-    except Exception as e:
-        print(f'[eda_validation] failed: {e}', flush=True)
-    else:
-        print(f'[eda_validation] done ({time.time() - t0:.1f}s)', flush=True)
+    _run_script('eda_validation.py', {
+        'figure_dir': FIGURE_DIR,
+        'bench_csv': _RELEASE_CSV,
+    })
+    print(f'[eda_validation] done ({time.time() - t0:.1f}s)', flush=True)
 
 
 # -------------------------------------------------------------------------
@@ -474,6 +518,7 @@ def main():
 
     # Fail here, before any work, if a source file is missing.
     preflight_data()
+    preflight_exclusions()
 
     for flag, fn, name in [
         (RUN_PU_RAT, run_pu_rat, 'pu_rat'),

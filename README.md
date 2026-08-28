@@ -38,7 +38,8 @@ pip install pandas numpy openpyxl matplotlib seaborn scipy
 ├─ S3_combine.py           combination and release view
 ├─ paper_figure.py         filtering and manual-check figures
 ├─ eda_validation.py       technical validation figures
-├─ manual_exclusions.csv   the manual distribution check (see below)
+├─ manual_exclusions_format.csv
+│                          template for the manual inspection list (see below)
 │
 ├─ data_raw/               source data, as delivered (see below)
 │                          `공통코드.xlsx` is included in this repository;
@@ -185,8 +186,13 @@ Every count printed along the way is accumulated in
 ## Manual exclusion list
 
 The last step of the quality control is a manual inspection, which removes a
-small number of institutions that the automatic rules do not catch.
-`manual_exclusions.csv` is where those institutions are declared:
+small number of institutions that the automatic rules do not catch. The
+pipeline reads them from `manual_exclusions.csv`, next to the scripts.
+
+That file is not distributed. What ships instead is
+`manual_exclusions_format.csv`, which carries the header and one example row
+per type. **Rename it to `manual_exclusions.csv`, delete the example rows, and
+enter your own.** The columns are:
 
 | column | meaning |
 |---|---|
@@ -205,7 +211,7 @@ distribution figure:
 | `mat_err` | matching error — the institution is linked to a building that belongs to a different facility, or to only part of its own, so its floor area and its energy do not describe the same thing | no |
 | `dist_err` | distribution error — the matching is sound, but the institution sits where no operating institution can sit in the joint distributions, so the underlying record is taken to be wrong | yes |
 
-`paper_figure.py` marks the `dist_err` entries (PO1, PO2, ...) because that
+`paper_figure.py` marks the `dist_err` entries (A1, A2, ...) because that
 figure is the view they were found on. The `mat_err` entries carry no meaning on
 those axes, so they are left out of the figure.
 
@@ -215,12 +221,12 @@ ykiho,list_ty,reason_code,reason_en,note_ko
 <institution identifier>,dist_err,DIST_OUTLIER,Bed-based intensity is implausible for an operating institution.,
 ```
 
-The file shipped here is a **template with one example row per type**. The
-identifier is a pseudonymous key that can be resolved to a named institution
-through public health-insurance data, so no real identifiers are distributed
-with the code. Carry out the manual check on your own copy of the source data
-and enter your own rows; with the template as supplied this step removes
-nothing, and the resulting record count is correspondingly higher.
+The identifier is a pseudonymous key that can be resolved to a named
+institution through public health-insurance data, so no real identifiers are
+distributed with the code. Carry out the manual inspection on your own copy of
+the source data and enter what it finds. Leaving the example rows in place
+removes nothing, because those identifiers match no record, and the resulting
+count is correspondingly higher than the one reported for this dataset.
 
 ## Notes
 
@@ -237,3 +243,11 @@ nothing, and the resulting record count is correspondingly higher.
 - The scripts are executed with `runpy` from `run_all_merge.py`, which injects
   the paths and the sub-period into each script's globals. Each script also
   runs standalone, falling back to the defaults at the top of its file.
+
+## License
+
+The code in this repository is released under the MIT License; see `LICENSE`.
+
+This covers the code only. The source datasets are not redistributed here (see
+**Source data** above for what each one is and where it is obtained), and each
+provider sets its own terms of use.

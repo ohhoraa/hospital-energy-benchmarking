@@ -39,7 +39,7 @@ non-padded spellings, and assigns several codes to one name, so a hand-written
 code list silently misses cases; conversely, name matching alone misses the
 rows whose name is missing but whose code is present. The code set is
 therefore derived from the name-code pairs observed in the source and combined
-with a seed list, with two safeguards (see Section 3).
+with a seed list, subject to a safeguard (see Section 3).
 """
 
 import os
@@ -65,18 +65,10 @@ if 'date' not in globals():
 # Floor summary source file.
 if 'flr_ouln_file' not in globals():
     flr_ouln_file = 'bld_flr_ouln_delimiter_bar_euckr.txt'
-if 'flr_ouln_enc' not in globals():
-    flr_ouln_enc = 'euc-kr'
 
 # Output file name (read by S1).
 if 'pu_rat_file' not in globals():
     pu_rat_file = f'{date} pu_rat.txt'
-
-# A single floor larger than this is treated as a suspected decimal or
-# thousands-separator error. Such rows are reported in the log but NOT removed,
-# because the correct value cannot be recovered from this file alone.
-if 'area_outlier_thr' not in globals():
-    area_outlier_thr = 100_000
 
 # Write the run log to a text file. Optional, but useful on a script that
 # reads about 4 GB: it is where a failure is traced back to.
@@ -190,21 +182,19 @@ try:
         #   animal clinic 03036 etc. : Items 3 and 4, neighbourhood living
         #   public health centre 03108 : Item 3(f)
         #   medical tourism hotel 15208 : Item 15, lodging
-        #   acupuncture / bonesetting / massage clinics : Item 3(d)
+        #
+        #   Item 3(d), Class I neighbourhood living facilities: "clinics,
+        #   dental clinics, Korean medicine clinics, acupuncture clinics,
+        #   bonesetting clinics, midwifery clinics, massage clinics, postpartum
+        #   care centres and similar facilities for the treatment of
+        #   residents". These are outpatient care institutions and are excluded
+        #   from the numerator while remaining in the denominator; simply
+        #   leaving them out of this list achieves that. The postpartum care
+        #   centre is named explicitly in the decree. "josanso" does not appear
+        #   in the current decree; it follows the category of "josanwon"
+        #   (midwifery clinic), which replaced it in the same position, which
+        #   mirrors the yoyangso -> yoyangbyeongwon mapping above.
     ]
-
-    # Item 3(d), Class I neighbourhood living facilities - excluded from the
-    # numerator, retained in the denominator:
-    #   "clinics, dental clinics, Korean medicine clinics, acupuncture clinics,
-    #    bonesetting clinics, midwifery clinics, massage clinics, postpartum
-    #    care centres and similar facilities for the treatment of residents"
-    #   - the postpartum care centre is named explicitly in the decree.
-    #   - "josanso" does not appear in the current decree; it follows the
-    #     category of "josanwon" (midwifery clinic), which replaced it in the
-    #     same position. This mirrors the yoyangso -> yoyangbyeongwon mapping.
-    #   - acupuncture, bonesetting and massage clinics occur in the source but
-    #     were never in HOS_NMS.
-    CLINIC_NMS = ['의원', '치과의원', '한의원', '조산원', '조산소', '산후조리원']
 
     # Seed code list for medical facilities.
     #   Section 3 derives the code set from the name-code pairs observed in the
@@ -227,7 +217,9 @@ try:
     log(f'\n[config] medical-use names: {len(HOS_NMS)}')
     log(f'   Table 1 Item 9 (medical facilities): included in the numerator')
     log(f'   Table 1 Item 3(d) Class I neighbourhood living facilities '
-        f'{CLINIC_NMS}: excluded from the numerator, retained in the denominator')
+        f'(clinic, dental clinic, Korean medicine clinic, midwifery clinic, '
+        f'postpartum care centre): excluded from the numerator, retained in '
+        f'the denominator')
 
     # Car parks and garages, regardless of floor position.
     #   Both code and name are checked: codes alone miss the superseded system,
@@ -260,13 +252,26 @@ try:
     log(f'[load] {file_path}')
     log(f'       (about 4 GB; only {USECOLS} are read)')
     df_bldg = pd.read_csv(
-        file_path, delimiter='|', encoding=flr_ouln_enc, low_memory=False,
+        file_path, delimiter='|', encoding='euc-kr', low_memory=False,
         usecols=USECOLS,
         # Codes must keep their leading zero (09000 must not become 9000) and
         # the primary key is a string.
         dtype={PK: str, 'main_purps_cd': str},
     )
     log(f'[load] rows = {len(df_bldg):,}')
+
+    # Normalise both text columns ONCE, here, so that every section below
+    # works on the same values. Matching is done on the registered name, so
+    # ideographic spaces and padding have to go; and `astype(str)` turns a
+    # missing value into the literal 'nan', which would defeat `isna()` later.
+    # The code is only stripped of whitespace, never re-valued: a leading zero
+    # is meaningful (09000 is not 9000).
+    for _c in ('main_purps_nm', 'main_purps_cd'):
+        df_bldg[_c] = (df_bldg[_c].astype(str)
+                       .str.replace('\u3000', ' ', regex=False)
+                       .str.strip()
+                       .replace({'nan': np.nan, 'None': np.nan, '': np.nan}))
+
     lap('load')
 
     # =========================================================================
@@ -283,18 +288,11 @@ try:
     #
     # The derived set is unioned with a seed list, because a code that never
     # co-occurs with a name (every row carrying it has a missing name) cannot
-    # be derived. Two safeguards then apply:
-    #   1) a code seen with both medical and non-medical names is dropped, and
-    #      those rows are judged by name only
-    #   2) a code shared with the Item 3(d) clinic names is dropped
-    _nm_norm = (df_bldg['main_purps_nm'].astype(str)
-                .str.replace('\u3000', ' ', regex=False).str.strip()
-                .replace({'nan': np.nan, 'None': np.nan, '': np.nan}))
-    _cd_norm = (df_bldg['main_purps_cd'].astype(str)
-                .str.replace('\u3000', ' ', regex=False).str.strip()
-                .replace({'nan': np.nan, 'None': np.nan, '': np.nan}))
-
-    _pair = (pd.DataFrame({'main_purps_nm': _nm_norm, 'main_purps_cd': _cd_norm})
+    # be derived. One safeguard then applies: a code seen with both medical and
+    # non-medical names is dropped, and those rows are judged by name only.
+    # This also covers the Item 3(d) clinic names, which are non-medical for
+    # the purposes of the numerator.
+    _pair = (df_bldg[['main_purps_nm', 'main_purps_cd']]
              .dropna(subset=['main_purps_nm', 'main_purps_cd'])
              .groupby(['main_purps_nm', 'main_purps_cd']).size().rename('n')
              .reset_index())
@@ -302,28 +300,20 @@ try:
     _hos_pair = _pair[_pair['main_purps_nm'].isin(HOS_NMS)]
     _cd_nms = _pair.groupby('main_purps_cd')['main_purps_nm'].apply(set).to_dict()
     #   _pair only holds rows where both name and code are present, so the full
-    #   set of codes has to come from _cd_norm directly.
-    _all_cd = set(_cd_norm.dropna().unique())
+    #   set of codes has to come from the column directly.
+    _all_cd = set(df_bldg['main_purps_cd'].dropna().unique())
 
     _derived = set(_hos_pair['main_purps_cd'])
     _cand_cd = _derived | (HOS_CDS_SEED & _all_cd)
 
-    # Safeguard 1. A code that never co-occurs with a name has an empty name set
+    # Safeguard. A code that never co-occurs with a name has an empty name set
     # and passes; the seeded codes fall into this case, which is the point.
     _HOS_SET = set(HOS_NMS)
     HOS_CDS = {c for c in _cand_cd if _cd_nms.get(c, set()) <= _HOS_SET}
     _mixed = sorted(_cand_cd - HOS_CDS)
-    # Safeguard 2.
-    _clinic_cd = set(_pair.loc[_pair['main_purps_nm'].isin(CLINIC_NMS),
-                               'main_purps_cd'])
-    _bad = sorted(HOS_CDS & _clinic_cd)
-    HOS_CDS -= set(_bad)
 
     log(f'\n[codes] HOS_CDS = {len(HOS_CDS)} '
         f'(derived {len(_derived)} + seeded {len(HOS_CDS_SEED & _all_cd)})')
-    if _bad:
-        log(f'   WARNING: {len(_bad)} code(s) shared with the clinic names '
-            f'dropped: {_bad}')
     if _mixed:
         log(f'   WARNING: {len(_mixed)} code(s) seen with both medical and '
             f'non-medical names dropped (those rows are judged by name only)')
@@ -332,7 +322,8 @@ try:
         log(f'   WARNING: {len(_new_cd)} code(s) derived from the source are '
             f'absent from the seed list: {_new_cd}')
         log('            the code system has changed; extend _SEED5/_SEED_OLD.')
-    _only_cd = int((_nm_norm.isna() & _cd_norm.isin(HOS_CDS)).sum())
+    _only_cd = int((df_bldg['main_purps_nm'].isna()
+                    & df_bldg['main_purps_cd'].isin(HOS_CDS)).sum())
     log(f'   {_only_cd:,} row(s) identified by code alone (missing name)')
 
     lap('code set')
@@ -348,17 +339,7 @@ try:
     log(f'1) drop missing {PK} : rows {len(df_bldg):,} -> {len(df):,}  '
         f'({df[PK].nunique():,} building records)')
 
-    # Normalise the use name (matching is name-based, so ideographic spaces and
-    # padding must be stripped).
-    df['main_purps_nm'] = (df['main_purps_nm'].astype(str)
-                           .str.replace('　', ' ', regex=False)
-                           .str.strip()
-                           .replace({'nan': np.nan, 'None': np.nan, '': np.nan}))
-
-    # Normalise whitespace in the use code but never change its value.
-    _cd = df['main_purps_cd'].astype(str).str.strip()
-    df['main_purps_cd'] = _cd.replace({'nan': np.nan, 'None': np.nan, '': np.nan})
-
+    #   Both text columns were normalised once, right after the load.
     #   `na=False` is required: with missing values, str.fullmatch returns an
     #   object dtype containing NaN rather than a boolean mask, and `~` then
     #   raises TypeError.
@@ -382,19 +363,6 @@ try:
     log(f'2) negative area: {n_neg:,} rows -> absolute value '
         f'({n_neg_pk:,} building records affected)')
     df.loc[_neg, 'area'] = df.loc[_neg, 'area'].abs()
-
-    # Upper-bound check - reported, not removed. A single floor above the
-    # threshold suggests a decimal or separator error; if it belongs to a
-    # medical building it corrupts flr_net_area and pu_rat, so the count is
-    # logged for inspection.
-    _hos_pk = set(df.loc[df['main_purps_nm'].isin(HOS_NMS)
-                         | df['main_purps_cd'].isin(HOS_CDS), PK])
-    _big = df['area'] > area_outlier_thr
-    if _big.any():
-        _big_pk = set(df.loc[_big, PK])
-        log(f'   [check] {int(_big.sum()):,} floor(s) above '
-            f'{area_outlier_thr:,} m2 across {len(_big_pk):,} building '
-            f'record(s), of which medical: {len(_big_pk & _hos_pk):,}')
 
     # Drop zero and missing areas (negatives were already made positive).
     _bad_area = df['area'].isna() | (df['area'] <= 0)

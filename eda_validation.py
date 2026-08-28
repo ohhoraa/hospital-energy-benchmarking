@@ -19,7 +19,6 @@ Figures (numbered as in the paper)
 """
 
 import os
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -43,12 +42,8 @@ mpl.rcParams['axes.unicode_minus'] = False
 # =============================================================================
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-if 'output_dir' not in globals():
-    output_dir = os.path.join(_BASE_DIR, 'data_output')
 if 'figure_dir' not in globals():
     figure_dir = os.path.join(_BASE_DIR, 'figures')
-if 'save_f' not in globals():
-    save_f = True
 
 os.makedirs(figure_dir, exist_ok=True)
 
@@ -58,24 +53,18 @@ YEARS = (2018, 2019, 2020, 2021)
 # -----------------------------------------------------------------------------
 # Locate the released file
 # -----------------------------------------------------------------------------
-if 'bench_csv' not in globals():
-    _cands = sorted(
-        str(p) for p in Path(output_dir).glob('hospital_energy_benchmarking_*.csv')
+#   The path is supplied by run_all_merge.py, which takes it from S3, so the
+#   validated file is always the one this run wrote. Searching the output folder
+#   for a released CSV would risk validating a file left over from an earlier
+#   run with a different N.
+bench_csv = globals().get('bench_csv')
+if bench_csv is None:
+    raise RuntimeError(
+        'bench_csv was not supplied.\n'
+        '  -> run this through run_all_merge.py with RUN_S3 = True and '
+        'SAVE_RELEASE_CSV = True; it passes the path of the released CSV that '
+        'S3 just wrote.'
     )
-    if not _cands:
-        raise FileNotFoundError(
-            f'Released CSV not found in {output_dir}\n'
-            f'  -> run S3_combine.py first, or pass bench_csv explicitly.'
-        )
-    if len(_cands) > 1:
-        # More than one candidate usually means an earlier run is still in the
-        # folder; picking one silently would validate the wrong file.
-        raise RuntimeError(
-            f'{len(_cands)} candidate released files - ambiguous:\n'
-            + '\n'.join(f'    {os.path.basename(c)}' for c in _cands)
-            + '\n  -> pass bench_csv explicitly, or clear the folder.'
-        )
-    bench_csv = _cands[0]
 
 print(f'[eda_validation] input: {os.path.basename(bench_csv)}')
 df = pd.read_csv(bench_csv)
@@ -88,9 +77,6 @@ if _missing:
         f'Columns missing from the released CSV: {_missing}\n'
         f'  -> check RELEASE_COLS in S3_combine.py.'
     )
-
-print(df['gfa'].describe().round(1).to_string())
-print(df['hos_ty_eng'].value_counts().to_string())
 
 
 # =============================================================================
@@ -107,10 +93,12 @@ def eui(d, year):
 
 
 def save_fig(fname):
-    out = os.path.join(figure_dir, fname if fname.endswith('.png') else fname + '.png')
-    if save_f:
-        plt.savefig(out, dpi=300, bbox_inches='tight')
-        print(f'[saved] {out}')
+    """Write the current figure. Whether this step runs at all is
+    decided by RUN_* in run_all_merge.py, so there is no per-figure
+    switch here."""
+    out = os.path.join(figure_dir, fname)
+    plt.savefig(out, dpi=300, bbox_inches='tight')
+    print(f'[saved] {out}')
     plt.close()
 
 
@@ -123,7 +111,7 @@ PAIRS = [
     ('(c) 2020–2021', 2020, 2021),
 ]
 
-fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+_, axes = plt.subplots(1, 3, figsize=(18, 6))
 
 for ax, (title_txt, yx, yy) in zip(axes, PAIRS):
     x, y = eui(df, yx), eui(df, yy)
@@ -155,9 +143,9 @@ save_fig('fig6_interannual_consistency.png')
 # Figures 7-8. EUI distributions with reference values
 # =============================================================================
 def plot_density_with_ref(d, years, group_col, exclude_groups, ref_dict=None,
-                          figsize=(6, 5), n_fill=0, colors=None, alpha=0.30,
+                          figsize=(6, 5), n_fill=0, alpha=0.30,
                           linewidth=1.0, bw_adjust=1.1, fill=True, xlim=None,
-                          show_median_line=False, save_path=None):
+                          save_path=None):
     """Overlay the EUI distributions of several years and mark reference values.
 
     years : list of years; the legend label is the year itself.
@@ -165,23 +153,20 @@ def plot_density_with_ref(d, years, group_col, exclude_groups, ref_dict=None,
     sns.set_style('whitegrid')
     ref_dict = ref_dict or {}
 
-    d_plot = d if exclude_groups is None else d[~d[group_col].isin(exclude_groups)]
+    d_plot = d[~d[group_col].isin(exclude_groups)]
 
-    if colors is None:
-        colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red'][:len(years)]
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red'][:len(years)]
 
     series = [eui(d_plot, y).dropna() for y in years]
     medians = [s.median() for s in series]
 
-    fig, ax = plt.subplots(figsize=figsize)
+    _, ax = plt.subplots(figsize=figsize)
     ax.grid(False)
 
     for i, (s, med, year, color) in enumerate(zip(series, medians, years, colors)):
         sns.kdeplot(x=s, ax=ax, fill=(fill and i == n_fill), common_norm=False,
                     bw_adjust=bw_adjust, alpha=alpha, linewidth=linewidth,
                     color=color, label=f'{year} (median = {med:.1f}, n = {len(s):,})')
-        if show_median_line:
-            ax.axvline(med, color=color, linestyle=':', linewidth=1.2, alpha=0.95)
 
     # Reference lines, labelled from the top down.
     y_min, y_max = ax.get_ylim()
@@ -205,11 +190,11 @@ def plot_density_with_ref(d, years, group_col, exclude_groups, ref_dict=None,
     save_fig(save_path)
 
 
-def plot_density_by_hos_type_with_ref(d, year, group_col='hos_ty_eng',
-                                      ref_dict=None, exclude_groups=('KH', 'TH'),
-                                      figsize=(6, 5), labels=None, colors=None,
+def plot_density_by_hos_type_with_ref(d, year, exclude_groups,
+                                      group_col='hos_ty_eng', ref_dict=None,
+                                      figsize=(6, 5),
                                       alpha=0.18, linewidth=1.0, bw_adjust=1.1,
-                                      fill=True, xlim=None, show_median_line=False,
+                                      fill=True, xlim=None,
                                       save_path=None):
     """EUI distribution of one year by institution type, with per-type reference
     values drawn in matching colours.
@@ -220,26 +205,22 @@ def plot_density_by_hos_type_with_ref(d, year, group_col='hos_ty_eng',
     sns.set_style('whitegrid')
     ref_dict = ref_dict or {}
 
-    d_plot = d.copy()
-    if exclude_groups is not None:
-        d_plot = d_plot[~d_plot[group_col].isin(exclude_groups)]
+    d_plot = d[~d[group_col].isin(exclude_groups)].copy()
 
-    groups = d_plot[group_col].dropna().unique().tolist()
+    #   Sorted, not order of appearance: the colour a type receives must not
+    #   depend on which row happens to come first in the input file, because
+    #   ref_dict pins a colour per type.
+    groups = sorted(d_plot[group_col].dropna().unique().tolist())
     if not groups:
         raise ValueError(f"no valid group values in '{group_col}'")
 
-    labels = {g: (labels or {}).get(g, str(g)) for g in groups}
+    labels = {g: str(g) for g in groups}
 
-    if colors is None:
-        base = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
-                'tab:purple', 'tab:brown']
-        color_map = {g: base[i % len(base)] for i, g in enumerate(groups)}
-    elif isinstance(colors, dict):
-        color_map = {g: colors.get(g) for g in groups}
-    else:
-        color_map = {g: colors[i] for i, g in enumerate(groups)}
+    base = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
+            'tab:purple', 'tab:brown']
+    color_map = {g: base[i % len(base)] for i, g in enumerate(groups)}
 
-    fig, ax = plt.subplots(figsize=figsize)
+    _, ax = plt.subplots(figsize=figsize)
     ax.grid(False)
 
     for g in groups:
@@ -250,8 +231,6 @@ def plot_density_by_hos_type_with_ref(d, year, group_col='hos_ty_eng',
         sns.kdeplot(x=s, ax=ax, fill=fill, common_norm=False, bw_adjust=bw_adjust,
                     alpha=alpha, linewidth=linewidth, color=color_map[g],
                     label=f'{labels[g]} (median = {s.median():.1f}, n = {len(s):,})')
-        if show_median_line:
-            ax.axvline(s.median(), color=color_map[g], linestyle=':', linewidth=1.2)
 
     orig_y_max = ax.get_ylim()[1]
     ax.set_ylim(0, orig_y_max * 1.40)
