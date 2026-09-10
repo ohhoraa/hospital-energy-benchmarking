@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "Dataset construction pipeline for energy benchmarking of South Korean medical institutions"
+abstract: >-
+  Data processing pipeline that builds a nationwide energy benchmarking dataset
+  for South Korean medical institutions. The code merges the national building
+  register, Health Insurance Review and Assessment Service (HIRA) institutional
+  records, monthly metered energy use, and weather station observations into a
+  single institution-level dataset, then applies the filtering and screening
+  steps described in the accompanying manuscript.
+type: software
+authors:
+  - family-names: Oh
+    given-names: Jihyun
+    affiliation: "Ajou University"
+    orcid: "https://orcid.org/0000-0003-3011-1601"
+version: v1.0.1
+date-released: "2026-09-10"
+doi: 10.5281/zenodo.22139783
+license: MIT
+repository-code: "https://github.com/ohhoraa/hospital-energy-benchmarking"
+keywords:
+  - building energy benchmarking
+  - hospitals
+  - medical institutions
+  - South Korea
+  - open data

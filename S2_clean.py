@@ -142,8 +142,11 @@ def filter_stepwise(df, year_b, year_a):
     # period, but the HIRA snapshot is dated March 2020, so an institution that
     # opened during the period has mismatched reference dates.
     df_out = df_out.copy()
-    df_out['estb_dd'] = pd.to_datetime(df_out['estb_dd'], errors='coerce')
-    df_out = df_out[df_out['estb_dd'] < pd.Timestamp('2018-01-01')]
+    #   estb_dd is left as the source string and only read as a date here.
+    #   Storing the converted column would write it to Excel as a serial date,
+    #   and 1900-01-01 is serial 1, which openpyxl reads back as a time.
+    _estb = pd.to_datetime(df_out['estb_dd'], errors='coerce')
+    df_out = df_out[_estb < pd.Timestamp('2018-01-01')]
     print_counts(df_out, '--- opened on or before 1 January 2018')
 
     # ------------------------------------------- 2)~3) building register

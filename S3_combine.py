@@ -25,6 +25,7 @@ before_preprocessing files. Part C uses after_outlier only.
 
 import os
 import re
+import numpy as np
 import pandas as pd
 
 from common import YKIHO, SCOPES, STEPS, step_filename, final_filename
@@ -308,11 +309,32 @@ else:
     # population of the released dataset.
     _p1, _p2 = (f'{b}_{a}' for b, a in year_pairs)
     merged_inner = merge_year_pairs(df_1819, df_2021, _p1, _p2)
+    #   Format pinned: without it a time-only string parses to the run date.
     merged_inner['estb_dd'] = pd.to_datetime(merged_inner['estb_dd'],
-                                             errors='coerce')
+                                             format='%Y-%m-%d', errors='coerce')
+    _n_bad = int(merged_inner['estb_dd'].isna().sum())
+    if _n_bad:
+        print(f'[release] open_ymd: {_n_bad} unparsable opening date(s)')
     print(f'[release] inner join -> {len(merged_inner):,} rows')
 
     df_release = build_release_view(merged_inner)
+
+    #   An unrecorded lot area is written as 0 by the building register, and
+    #   the two ratios derived from it follow. Converted after every filtering
+    #   and screening step: in S1 or S2 these institutions would be dropped
+    #   instead, because clean_bc_rat() keeps a row on 'bc_rat <= 100' and that
+    #   comparison is False for NaN.
+    ZERO_AS_MISSING = ['plat_area', 'bc_rat', 'fa_rat']
+    _zero = {c: (df_release[c] == 0) for c in ZERO_AS_MISSING
+             if c in df_release.columns}
+    for _c, _m in _zero.items():
+        df_release.loc[_m, _c] = np.nan
+    if _zero:
+        _same = len({tuple(m) for m in _zero.values()}) == 1
+        print(f'[release] zeros -> missing: '
+              f'{ {c: int(m.sum()) for c, m in _zero.items()} }'
+              f'{"" if _same else "   WARNING: not the same rows"}')
+
     n_rel = len(df_release)
     print(f'[release] {n_rel:,} rows, {df_release.shape[1]} cols')
 

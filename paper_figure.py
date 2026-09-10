@@ -65,6 +65,23 @@ mpl.rcParams['ytick.labelsize'] = FS_TICK
 mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'DejaVu Sans']
 mpl.rcParams['axes.unicode_minus'] = False
+#   Mathtext ($...$) is rendered by the mathtext.* fonts, not font.family, so
+#   without these four lines the exponents in 'kWh/m$^2$' and '$R^2$' come out
+#   in DejaVu Sans while the surrounding text is Arial.
+mpl.rcParams['mathtext.fontset'] = 'custom'
+mpl.rcParams['mathtext.rm'] = 'Arial'
+mpl.rcParams['mathtext.it'] = 'Arial:italic'
+mpl.rcParams['mathtext.bf'] = 'Arial:bold'
+
+#   Arial is resolved silently to the next available font when it is missing,
+#   which produces figures that do not match the manuscript. Say so instead.
+try:
+    from matplotlib import font_manager as _fm
+    _fm.findfont(_fm.FontProperties(family='Arial'), fallback_to_default=False)
+    print('[font] Arial resolved')
+except Exception:
+    print('[font] WARNING: Arial not found - figures will not match the '
+          'manuscript. Install Arial or change the font settings.')
 mpl.rcParams['axes.grid'] = False
 
 
@@ -80,7 +97,7 @@ if 'figure_dir' not in globals():
 if 'exclusion_csv' not in globals():
     exclusion_csv = os.path.join(_BASE_DIR, 'manual_exclusions.csv')
 if 'date' not in globals():
-    date = 260820
+    date = 260826            # the prefix the files in data_prepared carry
 if 'hira' not in globals():
     hira = 202003
 # The sub-period and the year the figures are drawn for, set by
@@ -113,8 +130,8 @@ SPINE_W = 0.9
 
 # Figure 5. Set2, the first three colours, one per bed-count bin.
 BED_BINS = [0, 100, 500, 1000]
-BED_LABELS = ['30–100', '100–500', '500–1000']
-BED_COLORS = {'30–100': '#66c2a5', '100–500': '#fc8d62', '500–1000': '#8da0cb'}
+BED_LABELS = ['30–100', '101–500', '501–1,000']
+BED_COLORS = {'30–100': '#66c2a5', '101–500': '#fc8d62', '501–1,000': '#8da0cb'}
 C_GREY = 'lightgray'                     # the whole population behind a panel
 FIG5_SPINE = '0.5'                       # panel frame, and the legend box
 MARK_R = 12                              # callout circle radius, in points
@@ -174,6 +191,22 @@ def draw_eui_refs(ax, euis, xmax, ymax, fontsize, linewidth=1.0):
                 va=va, ha=ha, zorder=7)
 
 
+_BODY = []                      # lines written to body_numbers.txt
+
+
+def bn(line=''):
+    """Record a line for body_numbers.txt and echo it."""
+    _BODY.append(line)
+    print(line)
+
+
+def write_body_numbers():
+    out = os.path.join(figure_dir, f'body_numbers_{date}_{fig_year}.txt')
+    with open(out, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(_BODY) + '\n')
+    print(f'[saved] {out}')
+
+
 def save_fig(fname):
     """Write the current figure. Whether this step runs at all is
     decided by RUN_* in run_all_merge.py, so there is no per-figure
@@ -198,7 +231,11 @@ if not os.path.exists(_fp):
     )
 
 d4 = pd.read_excel(_fp)
-print(f'[fig4] input {os.path.basename(_fp)}: {len(d4):,} rows')
+bn('=' * 68)
+bn(f'Numbers quoted in the body text   (Figures 4 and 5, {fig_year})')
+bn('=' * 68)
+bn('')
+bn(f'[Figure 4] input {os.path.basename(_fp)}: {len(d4):,} rows')
 
 # Baseline conditions: the same two the filtering table treats as the starting
 # population rather than as filtering steps.
@@ -206,7 +243,7 @@ d4 = d4[d4['main_purps_cd'].astype(str).isin(MAIN_PURPS_CDS)]
 _single = {SCOPE_CFG[s]['model_ty'] for s in SCOPE_CFG}
 d4 = d4[d4['model_ty'].isin(_single)]
 n_integrated = d4[YKIHO].nunique()
-print(f'[fig4] after the two baseline conditions: {n_integrated:,} institutions')
+bn(f'  after the two baseline conditions: {n_integrated:,} institutions')
 
 # Gross floor area. totarea_adj is created during screening, so at this stage
 # the register value is used.
@@ -221,15 +258,23 @@ n_zero = int((d4['gfa'].fillna(0) <= 0).sum())
 n_huge = int((d4['gfa'] > GFA_PLOT_MAX).sum())
 d4p = d4[~_bad]
 n_plot = len(d4p)
-print(f'[fig4] not plotted: {int(_bad.sum())} '
-      f'(zero floor area {n_zero}, above {GFA_PLOT_MAX:.0e} m2 {n_huge})')
-print(f'[fig4] plotted: {n_plot:,}')
+bn(f'  not plotted: {int(_bad.sum())} '
+   f'(zero or missing floor area {n_zero}, above {GFA_PLOT_MAX:.0e} m2 {n_huge})')
+bn(f'  plotted: {n_plot:,}')
 
 hl_bed = d4p[d4p['bed_cnt'] > BED_MAX]
 hl_en = d4p[d4p['energy'] <= ENERGY_MIN]
 hl_band = d4p[d4p['energy'].between(ENERGY_MIN, ENERGY_NEAR, inclusive='right')]
-print(f'[fig4] bed_cnt > {BED_MAX:,}: {len(hl_bed)} / '
-      f'site_sum_{fig_year} <= {ENERGY_MIN:,}: {len(hl_en)}')
+_rest = d4p[d4p['bed_cnt'] <= BED_MAX]
+bn(f'  bed_cnt > {BED_MAX:,}: {len(hl_bed)} institutions')
+if len(hl_bed):
+    bn(f'    their median gfa      = {hl_bed["gfa"].median():,.0f} m2')
+    bn(f'    median gfa of the rest = {_rest["gfa"].median():,.0f} m2   '
+       f'({hl_bed["gfa"].median() / _rest["gfa"].median():.1f}x)')
+bn(f'  site_sum_{fig_year} <= {ENERGY_MIN:,} kWh: {len(hl_en)} institutions')
+bn(f'  site_sum_{fig_year} in ({ENERGY_MIN:,}, {ENERGY_NEAR:,}] kWh: '
+   f'{len(hl_band)} institutions')
+bn('')
 
 _x, _y = d4p['gfa'], d4p['energy']
 
@@ -332,7 +377,7 @@ axi.text(0.98, ENERGY_MIN / YI_MAX + 0.02, f'{ENERGY_MIN:,} kWh',
 handles = [
     Line2D([], [], marker='o', linestyle='none', markersize=13,
            markerfacecolor=C_OTHER, markeredgecolor='white', alpha=0.8,
-           label=f'Other institutions (n = {n_plot:,})'),
+           label=f'All institutions (n = {n_plot:,})'),
     Line2D([], [], marker='o', linestyle='none', markersize=15, color=C_BED,
            label=f'bed_cnt > {BED_MAX:,} (n = {len(hl_bed):,})'),
     Line2D([], [], marker='o', linestyle='none', markersize=15, color=C_LOW,
@@ -364,8 +409,8 @@ if not os.path.exists(_fp_fin):
     )
 
 d5 = pd.read_excel(_fp_fin)
-print(f'\n[fig5] input {os.path.basename(_fp_fin)}: '
-      f'{d5[YKIHO].nunique():,} institutions')
+bn(f'[Figure 5] input {os.path.basename(_fp_fin)}: '
+   f'{d5[YKIHO].nunique():,} institutions')
 
 # The manually excluded institutions are no longer in the final file, so they
 # are read back from before_preprocessing and appended for marking only.
@@ -381,8 +426,8 @@ if _po and os.path.exists(_fp_pre):
     po_rows = _pre[_pre[YKIHO].astype(str).isin(_po)].copy()
     if len(po_rows):
         po_rows['totarea_adj'] = totarea_adj(po_rows)
-print(f'[fig5] manually excluded institutions added back for marking: '
-      f'{po_rows[YKIHO].nunique() if len(po_rows) else 0}')
+bn(f'  manually excluded institutions added back for marking: '
+   f'{po_rows[YKIHO].nunique() if len(po_rows) else 0}')
 
 keep = ['ykiho', 'totarea_adj', 'bed_cnt', 'hos_ty_eng', f'site_sum_{fig_year}']
 d5 = pd.concat([d5[keep], po_rows[keep]], ignore_index=True) if len(po_rows) \
@@ -453,7 +498,7 @@ for ax, ty in zip(axes[0], panels):
 
     ax.set_title(f'{PANEL_LABEL.get(ty, ty)} (n = {len(sub):,})',
                  fontsize=FS_SUBTITLE, pad=TITLE_PAD)
-    ax.set_xlabel('GFA (m$^2$)', fontsize=FS_LABEL)
+    ax.set_xlabel('Gross floor area (m$^2$)', fontsize=FS_LABEL)
     # Large type makes the default tick count collide, as on Figure 4.
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -472,5 +517,8 @@ fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 1.02),
            ncol=len(handles), frameon=False, fontsize=FS_LABEL,
            handletextpad=0.4, columnspacing=1.6)
 save_fig('fig5_manual_check_bed_eui_by_type.png')
+
+bn('')
+write_body_numbers()
 
 print('\n[paper_figure] done')

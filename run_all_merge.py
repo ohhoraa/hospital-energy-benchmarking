@@ -29,15 +29,19 @@ Folders
 -------
   data_raw/        source data (not distributed; see README.md)
   data_prepared/   intermediate outputs the stages exchange
-  data_output/     released CSV, column dictionary, step-count table
+  data_output/     released CSV, column dictionary, step-count table,
+                   data-quality table
   figures/         technical-validation figures
 
 Settings
 --------
   YEAR_PAIRS   sub-periods to process
   RUN_PU_RAT   recompute the primary use area ratio (reads the ~4 GB floor
-               summary source, so it is off by default; the output is reused)
+               summary source; set it to False on later runs to reuse the output)
   RUN_S0 .. RUN_S3, RUN_COUNT_EXPORT, RUN_PAPER_FIGURE, RUN_EDA_VALIDATION
+               Any stage can be enabled on its own: a later stage reads the
+               files an earlier run left in data_prepared / data_output rather
+               than requiring the earlier stage in the same run.
   SAVE_*       optional outputs; the files the stages exchange are
                always written
 """
@@ -58,7 +62,7 @@ DATA_OUTPUT = os.path.join(BASE_DIR, 'data_output')      # deliverables
 FIGURE_DIR = os.path.join(BASE_DIR, 'figures')           # validation figures
 
 # Prefix stamped on the output file names.
-DATE = 260820
+DATE = 260826
 # Release of the HIRA medical institution information used (March 2020).
 HIRA = 202003
 
@@ -119,7 +123,8 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import counter        # noqa: E402
-from common import SCOPES, load_manual_exclusions_table   # noqa: E402
+from common import (SCOPES, final_filename,                # noqa: E402
+                    load_manual_exclusions_table)
 
 
 # -------------------------------------------------------------------------
@@ -479,23 +484,37 @@ def run_paper_figure():
 
 
 def run_eda_validation():
-    """Reads the released CSV written by S3."""
+    """Reads the released CSV and the S3 Part B stage file (model fit).
+
+    S3 need not run in the same run. Without a release from this run, the one
+    in data_output is used, which is what re-drawing the figures on their own
+    requires. That is still safe: eda_validation proceeds only when exactly one
+    release is there, names it with its write time, and stops if the stage file
+    holds a different population.
+    """
     _print_banner('Technical validation figures')
     _force_agg('eda_validation')
 
-    if _RELEASE_CSV is None:
-        raise RuntimeError(
-            'The released CSV was not written in this run, so there is '
-            'nothing to validate.\n'
-            '  -> set RUN_S3 = True and SAVE_RELEASE_CSV = True, or switch '
-            'RUN_EDA_VALIDATION off.'
+    _g = {'figure_dir': FIGURE_DIR, 'output_dir': DATA_OUTPUT}
+    if _RELEASE_CSV is not None:
+        _g['bench_csv'] = _RELEASE_CSV
+    else:
+        print('[eda_validation] no release was written in this run; falling '
+              'back to the released CSV in data_output.', flush=True)
+
+    #   Same population as the release: Part C is built from this join.
+    _cpm_xlsx = os.path.join(
+        DATA_PREPARED, final_filename('after_outlier', DATE, HIRA, 'all'))
+    if not os.path.exists(_cpm_xlsx):
+        raise FileNotFoundError(
+            f'{os.path.basename(_cpm_xlsx)} is missing, so the data-quality '
+            'table cannot be built.\n'
+            '  -> run S3 once (RUN_S3 = True) to write it.'
         )
+    _g['cpm_xlsx'] = _cpm_xlsx
 
     t0 = time.time()
-    _run_script('eda_validation.py', {
-        'figure_dir': FIGURE_DIR,
-        'bench_csv': _RELEASE_CSV,
-    })
+    _run_script('eda_validation.py', _g)
     print(f'[eda_validation] done ({time.time() - t0:.1f}s)', flush=True)
 
 
@@ -504,6 +523,14 @@ def run_eda_validation():
 # -------------------------------------------------------------------------
 def export_counts():
     _print_banner('Step-count table')
+    #   The counts are collected in memory while S2 and S3 run, so a run that
+    #   skips both has nothing to export and would overwrite the existing table
+    #   with an empty sheet.
+    if not (RUN_S2 or RUN_S3):
+        print(f'[skip] step-count table: S2 and S3 did not run, so no counts '
+              f'were recorded and {os.path.basename(COUNT_FILE)} is left as it '
+              f'is.', flush=True)
+        return
     counter.export_to_excel(COUNT_FILE)
 
 

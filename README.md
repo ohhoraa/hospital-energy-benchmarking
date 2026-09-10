@@ -1,5 +1,7 @@
 # A nationwide building energy benchmarking dataset for medical institutions in South Korea
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139783.svg)](https://doi.org/10.5281/zenodo.22139783)
+
 Python code that builds the dataset. It integrates four South Korean
 administrative datasets — the building registry, energy billing records, medical
 institution information and meteorological observations — into an
@@ -149,6 +151,14 @@ to re-run it.
 
 ## What the pipeline does
 
+The script numbering follows execution order, not the three steps described in
+the manuscript. The manuscript's two-stage integration spans `S1` (one
+configuration at a time) and `S3` (the two configuration-specific tables
+combined), and `S3` also joins the two sub-periods. Filtering and screening run
+per configuration in `S2`, before that combination. The dataset is the same
+either way, because every filter and screening criterion is evaluated on a
+single institution's record, and the manual exclusions are a fixed list.
+
 1. **pu_rat** — from the floor summary records, the share of floor area
    registered for medical use per building record.
    Medical use follows Table 1, Item 9 of the Enforcement Decree of the
@@ -243,6 +253,17 @@ count is correspondingly higher than the one reported for this dataset.
 - The scripts are executed with `runpy` from `run_all_merge.py`, which injects
   the paths and the sub-period into each script's globals. Each script also
   runs standalone, falling back to the defaults at the top of its file.
+
+## Citation
+
+If you use this code, please cite the archived release:
+
+> Oh, J. (2026). *Dataset construction pipeline for energy benchmarking of
+> South Korean medical institutions* (v1.0.0) [Software]. Zenodo.
+> https://doi.org/10.5281/zenodo.22139783
+
+The DOI above resolves to the latest release. `CITATION.cff` in the repository
+root carries the same metadata in machine-readable form.
 
 ## License
 

@@ -201,6 +201,9 @@ df_merge0 = df_merge0.rename(columns={
     'grnd_flr_cnt': 'grnd_flr_max',
     'ugrnd_flr_cnt': 'ugrnd_flr_max',
 })
+#   Int64 so that the S3 concatenation with MB, which is nullable for the same
+#   reason, does not fall back to float.
+df_merge0['ugrnd_flr_max'] = df_merge0['ugrnd_flr_max'].astype('Int64')
 
 
 # =============================================================================

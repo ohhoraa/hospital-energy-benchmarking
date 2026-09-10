@@ -251,11 +251,15 @@ df_merge0['bld_total_cnt'] = (df_merge0['mgm_upper_bld_pk']
 
 # Floor counts: the maximum over the member records, i.e. the tallest block.
 # S2 applies the above-ground floor check to this value.
-for out_col, src_col in (('grnd_flr_max', 'grnd_flr_cnt'),
-                         ('ugrnd_flr_max', 'ugrnd_flr_cnt')):
-    s = df_bld.groupby('mgm_upper_bld_pk')[src_col].max()
-    df_merge0[out_col] = (df_merge0['mgm_upper_bld_pk']
-                          .map(s).fillna(0).astype(int))
+_s = df_bld.groupby('mgm_upper_bld_pk')['grnd_flr_cnt'].max()
+df_merge0['grnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
+                             .map(_s).fillna(0).astype(int))
+
+#   ugrnd_flr_max is not filled: 0 is a valid count (no basement), so a filled
+#   0 would be indistinguishable from a real one. Int64 is nullable; int is not.
+_s = df_bld.groupby('mgm_upper_bld_pk')['ugrnd_flr_cnt'].max()
+df_merge0['ugrnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
+                              .map(_s).astype('Int64'))
 
 
 # =============================================================================
