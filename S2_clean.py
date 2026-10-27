@@ -9,15 +9,12 @@ Two quality-control steps
 filtering  = "not comparable"
 screening  = "value cannot be trusted"
 
-The number-of-doctors condition is a matter of selecting comparable
-institutions, so it belongs to filtering.
-
 Per-scope differences (common.SCOPE_CFG)
 ----------------------------------------
               SB                     MB
 key           mgm_bld_pk             mgm_upper_bld_pk
-floor area    totarea_adj (raw)      totarea_adj (after the master vs member
-                                     cross-check)
+floor area    totarea_adj (raw)      totarea_adj (after the master vs building
+                                     record cross-check)
 model_ty      SB-SI                  MB-SI
 file prefix   df_SB_merge            df_MB_merge
 
@@ -73,23 +70,21 @@ print(f'\n{"=" * 70}\n[S2] scope={scope}  {year_b}_{year_a}\n{"=" * 70}')
 
 
 def _fn(step):
-    """File name for this scope and sub-period."""
+    """File name for this scope and subperiod."""
     return step_filename(scope, step, date, hira, year_b, year_a)
 
 
 # Prints both counts (building key and institution) at every step.
 print_counts = make_counter(PK)
 
-# Count-table context. counter.log() returns silently without it, which would
-# discard every filtering and screening count.
+# Count-table context.
 if _USE_COUNTER:
     counter.set_context(scope=scope, year_pair=f'{year_b}_{year_a}')
 
 # S1 output.
 df_merge0 = pd.read_excel(os.path.join(data_dir, _fn('before_preprocessing')))
 
-# Institutions to remove in the manual inspection. Both types are removed here;
-# they are kept apart so that the log says which finding removed what.
+# Institutions to remove in the manual inspection.
 mat_err_list, dist_err_list = load_manual_exclusions(exclusion_csv)
 
 
@@ -99,10 +94,7 @@ mat_err_list, dist_err_list = load_manual_exclusions(exclusion_csv)
 def filter_stepwise(df, year_b, year_a):
     """Retain the institutions that can be compared on a common basis.
 
-    The order below is the reporting order: the final count does not depend
-    on it, but the intermediate counts do, and they are what the table2 sheet
-    of preprocessing_counts.xlsx reports. counter.TABLE2_SPEC lists the same
-    steps in the same order and must be kept in step with this function.
+    Order = table2 order; keep counter.TABLE2_SPEC in step.
 
     Not counted as filtering steps (baseline)
       - main_purps_cd in {'09000','9000'} : buildings registered for medical use
@@ -110,7 +102,7 @@ def filter_stepwise(df, year_b, year_a):
 
     Filters
       1) estb_dd < 2018-01-01           data limitation
-      2) flr_main_purps_rat >= 75       operational (medical primary use)
+      2) flr_main_purps_rat >= 75       operational (primary use)
       3) regstr_gb_cd == 1              operational (no privately owned units)
       4) site_sum > 20,000 in both years operational (annual energy lower bound)
       5) 30 <= bed_cnt <= 1000          analytic (comparable bed capacity)
@@ -128,29 +120,24 @@ def filter_stepwise(df, year_b, year_a):
     # Medical use. The source mixes zero-padded and non-padded codes, so the
     # comparison is made on strings.
     df_out = df_out[df_out['main_purps_cd'].astype(str).isin(MAIN_PURPS_CDS)]
-    print_counts(df_out, '--- principal use code retained')
+    print_counts(df_out, '--- primary-use code retained')
 
     df_out = df_out[df_out['model_ty'] == MODEL_TY]
-    # The console prints the actual value (SB-SI / MB-SI) while the count table
-    # keys on a normalised step, so one step stays on one row.
     print_counts(df_out, f'--- model_ty == {MODEL_TY} retained',
                  step='model_ty == single-institution (*-SI) retained')
 
-    # ------------------------------------------- 1) temporal inconsistency
+    # ------------------------------ 1) opening date (data limitation)
     print('\n### data-limitation filter ###')
-    # The building register and the billing records cover the whole study
+    # The building registry and the billing records cover the whole study
     # period, but the HIRA snapshot is dated March 2020, so an institution that
     # opened during the period has mismatched reference dates.
     df_out = df_out.copy()
-    #   estb_dd is left as the source string and only read as a date here.
-    #   Storing the converted column would write it to Excel as a serial date,
-    #   and 1900-01-01 is serial 1, which openpyxl reads back as a time.
     _estb = pd.to_datetime(df_out['estb_dd'], errors='coerce')
     df_out = df_out[_estb < pd.Timestamp('2018-01-01')]
-    print_counts(df_out, '--- opened on or before 1 January 2018')
+    print_counts(df_out, '--- opened before 1 January 2018')
 
-    # ------------------------------------------- 2)~3) building register
-    print(f'\n### {scope} operational filters (register) ###')
+    # ------------------------------------------- 2)~3) building registry
+    print(f'\n### {scope} operational filters (registry) ###')
 
     # pu_rat >= 75%: most of the building energy can be attributed to medical
     # use. The 25% bound follows the ENERGY STAR scoring rule.
@@ -174,36 +161,18 @@ def filter_stepwise(df, year_b, year_a):
     print('\n### analytic filters ###')
     # At least 30 beds is the statutory minimum for most inpatient types; at
     # most 1,000 excludes the very largest institutions, which operate at a
-    # different scale. Both bounds are one step, so they are applied together.
+    # different scale.
     df_out = df_out[df_out['bed_cnt'].between(30, 1000)]
     print_counts(df_out, '--- 30 <= bed_cnt <= 1000')
 
     # --------------------------------------------------------- 6) doctors
-    #
     # Basis: Enforcement Rule of the Medical Service Act, Article 38 and
-    # Appendix 5 (staffing of medical institutions)
-    #   - general hospital / hospital : doctors =
-    #       ceil((annual average daily inpatients + outpatients / 3) / 20)
-    #   - long-term care hospital     : 2 doctors up to 80 average daily
-    #       inpatients, then 1 more per additional 40 (Korean medicine doctors
-    #       count towards this)
-    #   - Korean medicine and dental hospitals : only one doctor per additional
-    #       medical department, so zero is lawful
-    # Basis: Enforcement Rule of the Mental Health Act, Appendix 4
-    #   - psychiatric hospital : 1 psychiatric specialist per 60 inpatients
-    #
-    # Inverting the staffing formula, a single doctor is lawful only if
-    #     (annual average daily inpatients + outpatients / 3) <= 20,
-    # which, even taking outpatients as zero, requires a bed occupancy below
-    # 20 / bed_cnt. At the median bed count of this dataset that is an
-    # implausibly low occupancy, so "more than one doctor" is a far weaker bound
-    # than the statutory requirement: it removes records that contradict the
-    # staffing rule without excluding lawfully operating institutions.
+    # Appendix 5; Enforcement Rule of the Mental Health Act, Appendix 4.
+    # More than one doctor is a weaker bound than the statutory staffing.
     df_out = df_out[df_out['tot_dr_cnt'] > 1]
     print_counts(df_out, '--- tot_dr_cnt > 1')
 
     # ------------------------------------------------------- 7) floor area
-    # Single condition on gfa_r.
     df_out = df_out[df_out['vl_rat_estm_totarea'] > 1000]
     print_counts(df_out, '--- gfa_r > 1000 m2')
 
@@ -217,13 +186,12 @@ df_merge = filter_stepwise(df_merge0, year_b=year_b, year_a=year_a)
 # %% ==========================================================================
 # 2. SCREENING
 # =============================================================================
-# Order: in-range -> out-of-range -> relative comparisons
 df = df_merge.copy()
 
 if _USE_COUNTER:
     counter.current_section = 'screening'
 
-print('\n##### screening: building register #####')
+print('\n##### screening: building registry #####')
 
 # Building coverage ratio: above 100% recompute from footprint / lot area, and
 # drop the row if it still exceeds 100%.
@@ -231,34 +199,30 @@ df = clean_bc_rat(df)
 print_counts(df, '--- bc_rat <= 100 after correction')
 
 # Above-ground floor count: drop when <= 0 or missing.
-#   SB holds a single record, so the maximum equals the raw value. For MB an
-#   institution is dropped only when every member record is invalid, which is
-#   the appropriate judgement at the master-record level. A master record with
-#   no member records at all yields grnd_flr_max = 0 and is reported separately,
-#   because that is a matching gap rather than a floor-count error.
+#   For MB an institution is dropped only when every building record is
+#   invalid. A master record with no building records (grnd_flr_max = 0) is
+#   reported separately.
 _n_before = df[PK].nunique()
 _bad = grnd_flr_invalid(df['grnd_flr_max'])
 if _bad.any():
     print(f'    [check] invalid above-ground floor count: {_bad.sum()} rows '
           f'({df.loc[_bad, PK].nunique()} records)')
     if 'bld_total_cnt' in df.columns:
-        print(f'    [check] of which master records with no member records: '
+        print(f'    [check] of which master records with no building records: '
               f'{(df.loc[_bad, "bld_total_cnt"] == 0).sum()}')
 df = df[~_bad]
 print_counts(df, '--- grnd_flr_max > 0')
 print(f'    [check] records removed by the floor-count check = '
       f'{_n_before - df[PK].nunique()}')
 
-# Relative comparison: gfa versus gfa_r.
+# Relative comparison: totarea versus vl_rat_estm_totarea (gfa, gfa_r).
 #   The two differ only by the below-ground and parking areas, so a large
 #   discrepancy (a misplaced decimal point, for instance) means they are
 #   counting different things.
 df = df[df['totarea_abs_error'] < 0.99]
 print_counts(df, '--- |gfa - gfa_r| / gfa < 0.99')
 
-# Corrected gross floor area. The rule lives in common.totarea_adj so that
-# paper_figure.py applies exactly the same one to the institutions it adds back
-# for marking.
+# Corrected gross floor area (common.totarea_adj).
 df['totarea_adj'] = totarea_adj(df)
 
 print('\n##### screening: HIRA #####')
@@ -267,7 +231,7 @@ print('\n##### screening: HIRA #####')
 #   Basis: Enforcement Rule of the Medical Service Act, Appendix 4, minimum
 #   6.3 m2 net per bed in a multi-bed room, converted to a gross basis with a
 #   gross-to-net factor of 1.5. Long-term care hospitals are exempt because
-#   that category includes psychiatric hospitals, whose inpatient-room area is
+#   that category includes mental health hospitals, whose inpatient-room area is
 #   governed by the Mental Health Act rule instead.
 df = df[
     (df['hos_ty_eng'] == 'CH') |
@@ -275,9 +239,9 @@ df = df[
 ]
 print_counts(df, '--- area_bed >= 9.45 (except CH)')
 
-# In-range: the number of clinical departments must be present.
-df = df[df['dept_cnt'].notna()]
-print_counts(df, '--- dept_cnt present')
+# In-range: the number of clinical departments must be greater than zero.
+df = df[df['dept_cnt'] > 0]
+print_counts(df, '--- dept_cnt > 0')
 
 
 print('\n##### screening: energy #####')
@@ -290,8 +254,8 @@ print_counts(df, '--- two-year consumption ratio within 0.2-5')
 df = df[df[f'flag_en_ty_{year_b}_{year_a}'] == 0]
 print_counts(df, '--- identical energy-source composition')
 
-# In-range: electricity must be positive. Every hospital uses electricity, so a
-# zero means the metering is incomplete.
+# In-range: electricity must be positive. Every medical institution uses
+# electricity, so a zero means the metering is incomplete.
 _elec_cols = [f'{p}_elec_{y}' for p in ('site', 'pri') for y in (year_b, year_a)]
 _keep = np.ones(len(df), dtype=bool)
 for c in _elec_cols:
@@ -328,11 +292,11 @@ df = df[df['ns_11'] == 24]
 print_counts(df, '--- ns_elec == 24')
 
 # Gas and district heating are seasonal, so 12 records are required rather than 24.
-df = df[~(df[['ns_0', 'ns_12', 'ns_13']] < 12).any(axis=1)]
+df = df[~(df[['ns_12', 'ns_13']] < 12).any(axis=1)]
 print_counts(df, '--- ns_gas / ns_heat >= 12')
 
-# In-range: a coefficient of determination of zero means the fit failed.
-df = df[~(df[['r2_0', 'r2_11', 'r2_12', 'r2_13']] == 0).any(axis=1)]
+# In-range: change-point fit R2 (r2_11 / r2_12 / r2_13).
+df = df[~(df[['r2_11', 'r2_12', 'r2_13']] == 0).any(axis=1)]
 print_counts(df, '--- CPM R2 > 0')
 
 

@@ -2,7 +2,7 @@
 """
 run_all_merge.py - run the whole pipeline.
 
-pu_rat (primary use area ratio) -> S0 (data preparation) -> S1 (SB / MB
+pu_rat (primary-use area ratio) -> S0 (data preparation) -> S1 (SB / MB
 integration) -> S2 (filtering and screening) -> S3 (combination and release
 view), then the step-count table and the technical-validation figures.
 
@@ -17,7 +17,7 @@ Files
   common.py               shared constants, helpers and file-name rules
   cpm_besig.py            change-point models fitted with BE-sig (CPM = True)
   counter.py              step-by-step record counts
-  pu_rat.py               floor summary -> primary use area ratio (S1 input)
+  pu_rat.py               floor summary -> primary-use area ratio (S1 input)
   S0_data_prep.py
   S1_SB_merge.py / S1_MB_merge.py
   S2_clean.py
@@ -27,12 +27,13 @@ Files
 
 Folders
 -------
-  data_raw/        source data (not distributed; see README.md)
+  data_raw/        source data (a two-institution sample is included; see
+                   README.md)
   third_party/     BE-sig, downloaded on the first run with CPM = True
   data_prepared/   intermediate outputs the stages exchange
-  data_output/     released CSV, column statistics, step-count table,
-                   data-quality table
-  figures/         technical-validation figures
+  data_output/     released CSV, CPM parameters, column statistics and
+                   step-count table
+  figures/         figures
   document/        column dictionary, table schema and manual exclusion
                    template (shipped with the repository)
 """
@@ -62,11 +63,11 @@ RAW_BLD_FILE = 'bld_title_with_upper_delimiter_bar_euckr.txt'
 RAW_UP_BLD_FILE = 'bld_recap_title_delimiter_bar_euckr.txt'
 FLR_OULN_FILE = 'bld_flr_ouln_delimiter_bar_euckr.txt'
 
-# Primary use area ratio: written by pu_rat.py, read by S1.
+# Primary-use area ratio: written by pu_rat.py, read by S1.
 PU_RAT_FILE = f'{DATE} pu_rat.txt'
 RAW_PURPS_PATH = os.path.join(DATA_PREPARED, PU_RAT_FILE)
 
-# Institutions removed by the manual distribution check.
+# Institutions removed by the manual inspection.
 EXCLUSION_CSV = os.path.join(DATA_RAW, 'manual_exclusions.csv')
 
 # Optional sources merged in S1, per scope, inside data_raw/.
@@ -84,7 +85,7 @@ THIRD_PARTY = os.path.join(BASE_DIR, 'third_party')
 # -------------------------------------------------------------------------
 # Change-point models (see the header and README.md).
 #   True  : fitted in S1 with BE-sig  -> the released dataset
-#   False : change-point results prepared separately
+#   False : read from the *_CPM files supplied with the source data
 CPM = True
 
 # Optional sources merged in S1 (OPTIONAL_SOURCES above). They add columns to
@@ -99,7 +100,7 @@ YEAR_PAIRS = [
     (2020, 2021),
 ]
 
-# Sub-period and year the paper figures are drawn for. Figures 4 and 5 show a
+# Subperiod and year the paper figures are drawn for. Figures 4 and 5 show a
 # single year, so this picks which one; it does not affect the dataset.
 FIG_PAIR = YEAR_PAIRS[0]     # (2018, 2019)
 FIG_YEAR = FIG_PAIR[1]       # 2019
@@ -120,7 +121,7 @@ RUN_EDA_VALIDATION = True
 #   Always written, because the stages read them from one another:
 #     before_preprocessing (S1) / after_outlier (S2) / final_* (S3 A and B)
 #   Everything below is optional.
-SAVE_RELEASE_CSV = True         # hospital_energy_benchmarking_{N}.csv
+SAVE_RELEASE_CSV = True         # energy_benchmarking_{N}.csv
 SAVE_COLUMN_STATS = True        # column_statistics_{N}.xlsx
 SAVE_PU_RAT_LOG = True          # {DATE} pu_rat_log.txt
 
@@ -135,8 +136,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import counter        # noqa: E402
-from common import (SCOPES, final_filename,                # noqa: E402
-                    load_manual_exclusions_table)
+from common import SCOPES, load_manual_exclusions_table    # noqa: E402
 
 
 # -------------------------------------------------------------------------
@@ -210,8 +210,6 @@ def _required_sources():
 def preflight_data():
     """Check data_raw/ before anything runs, and report every missing file at once.
 
-    Without this the pipeline can fail hours in, on a file the user could have
-    supplied at the start.
     """
     _print_banner('Preflight: source files in data_raw/')
 
@@ -259,11 +257,6 @@ def preflight_data():
 def preflight_exclusions():
     """Report the manual exclusion list before anything runs.
 
-    Unlike the data_raw/ sources, this file is one the user writes by hand
-    (README explains how), so it is the one most easily forgotten. S2 and
-    paper_figure both raise on it, hours into a run, so it is checked here and
-    its contents summarised - how many institutions are about to be removed and
-    under which list_ty - so that an unintended list is visible up front.
     """
     if not (RUN_S2 or RUN_PAPER_FIGURE):
         return
@@ -287,16 +280,16 @@ def preflight_exclusions():
 
 
 # -------------------------------------------------------------------------
-# pu_rat. Floor summary -> primary use area ratio (S1 input)
+# pu_rat. Floor summary -> primary-use area ratio (S1 input)
 # -------------------------------------------------------------------------
 def run_pu_rat():
-    """Compute the primary use area ratio per building record.
+    """Compute the primary-use area ratio per building record.
 
-    Reads the full floor summary register (about 4 GB) and writes
+    Reads the full floor summary records (about 4 GB) and writes
     '{DATE} pu_rat.txt'. Must run before S1, which reads that file.
     pu_rat.py logs to a text file and prints only one line to the console.
     """
-    _print_banner('STEP pu_rat: primary use area ratio')
+    _print_banner('STEP pu_rat: primary-use area ratio')
     _run_script('pu_rat.py', {
         'data_dir_in': DATA_RAW,
         'data_dir': DATA_PREPARED,
@@ -313,7 +306,6 @@ def run_pu_rat():
 def run_s0():
     """Build the intermediate CSVs that S1 reads.
 
-    The year loop is inside the script, so it runs once.
     """
     _print_banner(f'STEP S0: data preparation (CPM = {CPM})')
     t0 = time.time()
@@ -345,8 +337,6 @@ def _s0_output_paths():
 def preflight_s1():
     """Check the S1 inputs before spending time on the merges.
 
-    Without this, a missing file raises FileNotFoundError on the first line of
-    S1, sometimes after pu_rat has already run for minutes.
     """
     missing = [p_ for p_ in _s0_output_paths() if not os.path.exists(p_)]
     if missing:
@@ -365,7 +355,7 @@ def preflight_s1():
 
     if not os.path.exists(RAW_PURPS_PATH):
         raise FileNotFoundError(
-            f'Primary use area ratio output missing: {RAW_PURPS_PATH}\n'
+            f'Primary-use area ratio output missing: {RAW_PURPS_PATH}\n'
             f'  -> set RUN_PU_RAT = True and run again.'
         )
 
@@ -373,16 +363,15 @@ def preflight_s1():
 
 
 # -------------------------------------------------------------------------
-# S1. Integration (SB / MB x sub-period)
+# S1. Integration (SB / MB x subperiod)
 # -------------------------------------------------------------------------
 def run_s1():
-    """Two scopes x two sub-periods = four runs.
+    """Two scopes x two subperiods = four runs.
 
-    The large sources are read once and cached for reuse. S1 only renames
-    non-destructively, so the cached frames are safe to share.
+    The large sources are read once and cached for reuse.
     """
     _print_banner(f'STEP S1: integration ({"/".join(SCOPES)} x '
-                  f'{len(YEAR_PAIRS)} sub-periods)')
+                  f'{len(YEAR_PAIRS)} subperiods)')
     preflight_s1()
 
     raw_cache = {
@@ -425,13 +414,11 @@ def run_s1():
 # S2. Filtering and screening
 # -------------------------------------------------------------------------
 def run_s2():
-    """Two scopes x two sub-periods = four runs.
+    """Two scopes x two subperiods = four runs.
 
-    counter.set_context() is called before each run, otherwise the counts are
-    discarded.
     """
     _print_banner('STEP S2: filtering and screening '
-                  f'({"/".join(SCOPES)} x {len(YEAR_PAIRS)} sub-periods)')
+                  f'({"/".join(SCOPES)} x {len(YEAR_PAIRS)} subperiods)')
 
     for year_b, year_a in YEAR_PAIRS:
         for scope in SCOPES:
@@ -458,10 +445,7 @@ def run_s2():
 # -------------------------------------------------------------------------
 # S3. Combination and release view
 # -------------------------------------------------------------------------
-# Path of the released CSV, captured from S3 below. The validation figures are
-# drawn from this exact file rather than from whatever the output folder holds,
-# so a leftover CSV from an earlier run with a different N cannot be validated
-# by mistake.
+# Path of the released CSV from S3; the validation figures use this file.
 _RELEASE_CSV = None
 
 
@@ -512,14 +496,7 @@ def run_paper_figure():
 
 
 def run_eda_validation():
-    """Reads the released CSV and the S3 Part B stage file (model fit).
-
-    S3 need not run in the same run. Without a release from this run, the one
-    in data_output is used, which is what re-drawing the figures on their own
-    requires. That is still safe: eda_validation proceeds only when exactly one
-    release is there, names it with its write time, and stops if the stage file
-    holds a different population.
-    """
+    """Technical validation figures from the released CSV."""
     _print_banner('Technical validation figures')
     _force_agg('eda_validation')
 
@@ -529,17 +506,6 @@ def run_eda_validation():
     else:
         print('[eda_validation] no release was written in this run; falling '
               'back to the released CSV in data_output.', flush=True)
-
-    #   Same population as the release: Part C is built from this join.
-    _cpm_xlsx = os.path.join(
-        DATA_PREPARED, final_filename('after_outlier', DATE, HIRA, 'all'))
-    if not os.path.exists(_cpm_xlsx):
-        raise FileNotFoundError(
-            f'{os.path.basename(_cpm_xlsx)} is missing, so the data-quality '
-            'table cannot be built.\n'
-            '  -> run S3 once (RUN_S3 = True) to write it.'
-        )
-    _g['cpm_xlsx'] = _cpm_xlsx
 
     t0 = time.time()
     _run_script('eda_validation.py', _g)
@@ -551,9 +517,7 @@ def run_eda_validation():
 # -------------------------------------------------------------------------
 def export_counts():
     _print_banner('Step-count table')
-    #   The counts are collected in memory while S2 and S3 run, so a run that
-    #   skips both has nothing to export and would overwrite the existing table
-    #   with an empty sheet.
+    #   Skipped when S2 and S3 did not run.
     if not (RUN_S2 or RUN_S3):
         print(f'[skip] step-count table: S2 and S3 did not run, so no counts '
               f'were recorded and {os.path.basename(COUNT_FILE)} is left as it '

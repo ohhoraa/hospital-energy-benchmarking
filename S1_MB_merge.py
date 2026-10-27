@@ -4,19 +4,17 @@ S1_MB_merge. Multiple-building (MB) integration.
 
 Scope : HIRA match_level == 'CASE101'
         one institution matched to one master building record, which in turn
-        covers several member building records -> Multiple Buildings (MB)
+        covers several building records -> Multiple Buildings (MB)
 
 Merge order : master building record + HIRA -> CPM -> energy -> weather
               (CPM = True: energy -> weather, then the CPM is fitted here),
-              plus the member building records aggregated to the master record
+              plus the building records aggregated to the master record
 Primary key : mgm_upper_bld_pk
 Output      : '{date} df_MB_merge_before_preprocessing {hira}_{yb}_{ya}.xlsx'
 
-See the header of S1_SB_merge.py for why the two scopes are separate scripts.
-
-The floor summary aggregation is computed per building record by pu_rat.py, so
-the master-record value is obtained by summing the member areas and then
-recomputing the ratio - not by averaging the ratios.
+pu_rat.py gives the ratio per building record. For MB, the medical-use and
+net floor areas of the building records under the master building record are
+summed, and the ratio is recomputed from the sums rather than averaged.
 """
 
 import os
@@ -120,7 +118,7 @@ df_up_bld = df_up_bld.loc[:, col_up_bld]
 
 
 # =============================================================================
-# 3. Member building records (for aggregation)
+# 3. Building records (for aggregation)
 # =============================================================================
 df_bld = raw_bld.copy()
 col_bld = [
@@ -155,8 +153,6 @@ if cpm:
             os.path.join(data_dir, 'after_master-monthly.csv'),
             encoding='utf-8-sig',
             dtype={'key': str, 'engy_kind_cd': str, 'use_ym': str},
-            # Exact round trip of the kWh values: the default parser can
-            # change the last digit, and the fitted coefficients respond to it.
             float_precision='round_trip')
 else:
     cpm_pair = pd.read_csv(
@@ -218,8 +214,8 @@ print(f'mgm_upper_bld_pk {merge0["mgm_upper_bld_pk"].nunique()} / '
 df_merge0 = merge_upbld(merge0, cpm_pair, energy_pair, weather,
                         on_key='mgm_upper_bld_pk')
 
-# CPM = True: fit the change-point models of the buildings left here, two
-# years at a time, and add them (see cpm_besig.attach_cpm).
+# CPM = True: fit the change-point models of the buildings left here, per
+# subperiod, and add them (see cpm_besig.attach_cpm).
 if cpm:
     import cpm_besig
     df_merge0 = cpm_besig.attach_cpm(
@@ -242,30 +238,25 @@ df_merge0['model_ty'] = np.where(df_merge0['hos_per_uppk'] == 1,
 
 
 # =============================================================================
-# 6. Derived: building register (aggregation of the member records)
+# 6. Derived: building registry (aggregation of the building records)
 # =============================================================================
-# Summed floor area of the member records. S2 compares it with the master-record
-# value to set totarea_adj.
+# Summed floor area of the building records (gfa_bld_sum). S2 compares it with
+# the master-record value to set totarea_adj.
 bld_area_total = df_bld.groupby('mgm_upper_bld_pk')['totarea'].sum()
-#   Kept as a float: where S2 adopts this value as totarea_adj it becomes the
-#   released gfa, and casting to int would silently truncate the sub-square-metre
-#   part. SB keeps its floor area as a float for the same reason.
 df_merge0['bld_area_total'] = (df_merge0['mgm_upper_bld_pk']
                                .map(bld_area_total).fillna(0).astype(float))
 
-# Absolute relative error between gfa and gfa_r (master-record values).
+# Absolute relative error between totarea and vl_rat_estm_totarea (gfa, gfa_r),
+# master-record values.
 df_merge0 = add_totarea_abs_error(df_merge0)
 
-# Floor summary aggregation: sum the member areas, then recompute the ratio.
+# Floor summary aggregation: sum the areas, then recompute the ratio.
 _g = df_bld.groupby('mgm_upper_bld_pk')
 flr_tot_area = _g['flr_tot_area'].sum()            # incl. parking
 flr_net_area = _g['flr_net_area'].sum()            # pu_rat denominator
 flr_parking_area = _g['flr_parking_area'].sum()    # parking
 flr_hos_area = _g['flr_hos_area'].sum()            # medical use
-#   Undefined (NaN) when the summed denominator is not positive, matching the
-#   guard in pu_rat.py. Without it a master record whose member records are all
-#   parking would divide by zero: pandas returns inf for a non-zero numerator,
-#   fillna does not catch inf, and inf passes the pu_rat >= 75 filter in S2.
+#   NaN when the summed denominator is not positive, as in pu_rat.py.
 flr_main_purps_rat = pd.Series(
     np.where(flr_net_area > 0, flr_hos_area / flr_net_area * 100, np.nan),
     index=flr_net_area.index,
@@ -281,21 +272,20 @@ df_merge0['flr_parking_area'] = df_merge0['mgm_upper_bld_pk'].map(flr_parking_ar
 df_merge0['flr_hos_area'] = df_merge0['mgm_upper_bld_pk'].map(flr_hos_area)
 df_merge0['flr_main_purps_rat'] = df_merge0['mgm_upper_bld_pk'].map(flr_main_purps_rat)
 
-# Number of member building records. Used by the above-ground floor check in S2
-# to distinguish a genuine floor-count error from a master record with no
-# member records at all.
+# Number of building records. Used by the above-ground floor check in S2 to
+# distinguish a floor-count error from a master record with no building records.
 bld_total_cnt = df_bld.groupby('mgm_upper_bld_pk')['mgm_bld_pk'].count()
 df_merge0['bld_total_cnt'] = (df_merge0['mgm_upper_bld_pk']
                               .map(bld_total_cnt).fillna(0).astype(int))
 
-# Floor counts: the maximum over the member records, i.e. the tallest block.
+# Floor counts: the maximum over the building records (the tallest building).
 # S2 applies the above-ground floor check to this value.
 _s = df_bld.groupby('mgm_upper_bld_pk')['grnd_flr_cnt'].max()
 df_merge0['grnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
                              .map(_s).fillna(0).astype(int))
 
 #   ugrnd_flr_max is not filled: 0 is a valid count (no basement), so a filled
-#   0 would be indistinguishable from a real one. Int64 is nullable; int is not.
+#   0 would be indistinguishable from a real one.
 _s = df_bld.groupby('mgm_upper_bld_pk')['ugrnd_flr_cnt'].max()
 df_merge0['ugrnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
                               .map(_s).astype('Int64'))

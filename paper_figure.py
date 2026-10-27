@@ -9,24 +9,9 @@ Output
   figures/fig4_filtering_energy_vs_gfa.png
   figures/fig5_manual_check_bed_eui_by_type.png
 
-Figure 4 - annual energy against gross floor area, for the population that
-  remains after the two-stage integration. The two baseline conditions
-  (principal use code, single-institution configuration) are applied here, so
-  the script starts from the before_preprocessing file and reproduces the same
-  population the filtering table starts from.
-    (a) full range, with the institutions above the bed upper bound labelled
-    (b) enlarged lower-left region, with the institutions at or below the annual
-        energy lower bound highlighted, the four immediately above it drawn as
-        open circles, and dashed constant-EUI reference lines
-
-Figure 5 - bed-based energy use intensity against gross floor area, by
-  institution type, used for the manual distribution check. The base population
-  is the final dataset; the institutions the manual inspection removed as
-  distribution errors (list_ty == 'dist_err' in manual_exclusions.csv) are added
-  back so that they can be marked (A1, A2, ... - A for atypical), taken from the
-  before_preprocessing file and put on the same corrected floor area. The
-  matching errors (mat_err) are not marked: they were found on the matching, not
-  on this view.
+Figure 4 - annual energy against gross floor area, before filtering.
+Figure 5 - bed-based EUI against gross floor area by institution type, with the
+           institutions removed as atypical (dist_err) marked.
 """
 
 import os
@@ -42,10 +27,7 @@ from matplotlib.ticker import MaxNLocator, ScalarFormatter
 from common import (MAIN_PURPS_CDS, YKIHO, SCOPE_CFG, final_filename,
                    manual_exclusion_types, totarea_adj)
 
-# Type sizes. The figures are reduced heavily when placed in a two-column
-# layout, so everything is set well above the matplotlib defaults. The
-# multipliers reproduce the sizes the analysis figures were settled on
-# (24 / 22 / 22 / 20 / 20 / 11); change BASE to rescale all of them at once.
+# Type sizes; change BASE to rescale all of them at once.
 BASE = 11
 FS_TITLE = BASE * 2.2             # 24.2
 FS_LEGEND = BASE * 2.0            # 22
@@ -65,16 +47,11 @@ mpl.rcParams['ytick.labelsize'] = FS_TICK
 mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'DejaVu Sans']
 mpl.rcParams['axes.unicode_minus'] = False
-#   Mathtext ($...$) is rendered by the mathtext.* fonts, not font.family, so
-#   without these four lines the exponents in 'kWh/m$^2$' and '$R^2$' come out
-#   in DejaVu Sans while the surrounding text is Arial.
 mpl.rcParams['mathtext.fontset'] = 'custom'
 mpl.rcParams['mathtext.rm'] = 'Arial'
 mpl.rcParams['mathtext.it'] = 'Arial:italic'
 mpl.rcParams['mathtext.bf'] = 'Arial:bold'
 
-#   Arial is resolved silently to the next available font when it is missing,
-#   which produces figures that do not match the manuscript. Say so instead.
 try:
     from matplotlib import font_manager as _fm
     _fm.findfont(_fm.FontProperties(family='Arial'), fallback_to_default=False)
@@ -100,7 +77,7 @@ if 'date' not in globals():
     date = 260826            # the prefix the files in data_prepared carry
 if 'hira' not in globals():
     hira = 202003
-# The sub-period and the year the figures are drawn for, set by
+# The subperiod and the year the figures are drawn for, set by
 # FIG_PAIR / FIG_YEAR in run_all_merge.py.
 if 'fig_pair' not in globals():
     fig_pair = (2018, 2019)
@@ -120,15 +97,15 @@ EUI_LINES_MAIN = (50, 10)        # constant-EUI reference lines on (b)
 EUI_LINES_INSET = (5, 1)         # and on the inset
 INSET_BOX = [0.365, 0.505, 0.62, 0.48]
 
-# Marks. One base colour plus two highlights; no colour map, so that the
-# highlights are the only thing colour carries.
+# Marks. One base color plus two highlights; no color map, so that the
+# highlights are the only thing color carries.
 C_OTHER, C_BED, C_LOW = '#9db4c0', '#d62728', '#ff7f0e'
 C_REF, C_REF_TXT = '0.45', '0.35'        # EUI reference line and its label
 REF_DASH = (0, (6, 4))
 S_BASE, S_HL, S_BAND = 48, 58, 70        # marker sizes on (a)/(b)
 SPINE_W = 0.9
 
-# Figure 5. Set2, the first three colours, one per bed-count bin.
+# Figure 5. Set2, the first three colors, one per bed-count bin.
 BED_BINS = [0, 100, 500, 1000]
 BED_LABELS = ['30–100', '101–500', '501–1,000']
 BED_COLORS = {'30–100': '#66c2a5', '101–500': '#fc8d62', '501–1,000': '#8da0cb'}
@@ -136,11 +113,6 @@ C_GREY = 'lightgray'                     # the whole population behind a panel
 FIG5_SPINE = '0.5'                       # panel frame, and the legend box
 MARK_R = 12                              # callout circle radius, in points
 MARK_OFFSET_FRAC = 0.08                  # callout label offset, share of y span
-# Callout prefix. 'A' for atypical, the word the manuscript uses for these
-# institutions. Not 'PO' (potential outlier): the removal is a decision already
-# taken, not a candidate, and these records are not erroneous - they are real
-# institutions removed for atypicality, which is the opposite of what calling
-# them outliers would say.
 MARK_PREFIX = 'A'
 
 os.makedirs(figure_dir, exist_ok=True)
@@ -148,11 +120,6 @@ os.makedirs(figure_dir, exist_ok=True)
 
 class FixedExpFormatter(ScalarFormatter):
     """Axis formatter with the exponent pinned to a fixed power (e.g. always 1e4).
-
-    Matplotlib picks the exponent from the axis maximum. In Figure 4 that makes
-    the (b) panel (upper limit 5e5) read 1e5 while the inset inside it (upper
-    limit 2.4e4) reads 1e4, so the two cannot be compared by eye. Pinning both
-    to 1e4 puts them on the same units.
     """
 
     def __init__(self, exp):
@@ -175,10 +142,8 @@ def set_fixed_exp(ax, exp, fontsize):
 def draw_eui_refs(ax, euis, xmax, ymax, fontsize, linewidth=1.0):
     """Constant-EUI reference lines through the origin, with inline labels.
 
-    These are not filter thresholds. They are the scale the reader uses to see
-    how low a point is, so they are drawn as grey dashes only. The label goes on
-    whichever edge the line leaves the axes through: the right edge if it gets
-    there first, otherwise the top.
+    The label goes on whichever edge the line leaves the axes through: the right
+    edge if it gets there first, otherwise the top.
     """
     for e in euis:
         ax.plot([0, xmax], [0, e * xmax], color=C_REF, linestyle=REF_DASH,
@@ -191,26 +156,8 @@ def draw_eui_refs(ax, euis, xmax, ymax, fontsize, linewidth=1.0):
                 va=va, ha=ha, zorder=7)
 
 
-_BODY = []                      # lines written to body_numbers.txt
-
-
-def bn(line=''):
-    """Record a line for body_numbers.txt and echo it."""
-    _BODY.append(line)
-    print(line)
-
-
-def write_body_numbers():
-    out = os.path.join(figure_dir, f'body_numbers_{date}_{fig_year}.txt')
-    with open(out, 'w', encoding='utf-8') as fh:
-        fh.write('\n'.join(_BODY) + '\n')
-    print(f'[saved] {out}')
-
-
 def save_fig(fname):
-    """Write the current figure. Whether this step runs at all is
-    decided by RUN_* in run_all_merge.py, so there is no per-figure
-    switch here."""
+    """Write the current figure."""
     out = os.path.join(figure_dir, fname)
     plt.savefig(out, dpi=300, bbox_inches='tight')
     print(f'[saved] {out}')
@@ -231,19 +178,12 @@ if not os.path.exists(_fp):
     )
 
 d4 = pd.read_excel(_fp)
-bn('=' * 68)
-bn(f'Numbers quoted in the body text   (Figures 4 and 5, {fig_year})')
-bn('=' * 68)
-bn('')
-bn(f'[Figure 4] input {os.path.basename(_fp)}: {len(d4):,} rows')
 
 # Baseline conditions: the same two the filtering table treats as the starting
 # population rather than as filtering steps.
 d4 = d4[d4['main_purps_cd'].astype(str).isin(MAIN_PURPS_CDS)]
 _single = {SCOPE_CFG[s]['model_ty'] for s in SCOPE_CFG}
 d4 = d4[d4['model_ty'].isin(_single)]
-n_integrated = d4[YKIHO].nunique()
-bn(f'  after the two baseline conditions: {n_integrated:,} institutions')
 
 # Gross floor area. totarea_adj is created during screening, so at this stage
 # the register value is used.
@@ -254,27 +194,12 @@ d4 = d4.assign(gfa=d4['totarea'], energy=d4[f'site_sum_{fig_year}'])
 # subsequent filtering or screening in any case.
 _bad = (d4['gfa'].isna() | (d4['gfa'] <= 0) | (d4['gfa'] > GFA_PLOT_MAX)
         | d4['energy'].isna())
-n_zero = int((d4['gfa'].fillna(0) <= 0).sum())
-n_huge = int((d4['gfa'] > GFA_PLOT_MAX).sum())
 d4p = d4[~_bad]
 n_plot = len(d4p)
-bn(f'  not plotted: {int(_bad.sum())} '
-   f'(zero or missing floor area {n_zero}, above {GFA_PLOT_MAX:.0e} m2 {n_huge})')
-bn(f'  plotted: {n_plot:,}')
 
 hl_bed = d4p[d4p['bed_cnt'] > BED_MAX]
 hl_en = d4p[d4p['energy'] <= ENERGY_MIN]
 hl_band = d4p[d4p['energy'].between(ENERGY_MIN, ENERGY_NEAR, inclusive='right')]
-_rest = d4p[d4p['bed_cnt'] <= BED_MAX]
-bn(f'  bed_cnt > {BED_MAX:,}: {len(hl_bed)} institutions')
-if len(hl_bed):
-    bn(f'    their median gfa      = {hl_bed["gfa"].median():,.0f} m2')
-    bn(f'    median gfa of the rest = {_rest["gfa"].median():,.0f} m2   '
-       f'({hl_bed["gfa"].median() / _rest["gfa"].median():.1f}x)')
-bn(f'  site_sum_{fig_year} <= {ENERGY_MIN:,} kWh: {len(hl_en)} institutions')
-bn(f'  site_sum_{fig_year} in ({ENERGY_MIN:,}, {ENERGY_NEAR:,}] kWh: '
-   f'{len(hl_band)} institutions')
-bn('')
 
 _x, _y = d4p['gfa'], d4p['energy']
 
@@ -343,8 +268,6 @@ ax.set_title('(b) Enlarged — lower-left region of (a)', loc='center',
              fontsize=FS_TITLE, y=1.0, pad=TITLE_PAD)
 _style4(ax)
 
-# Both y axes of (b) are pinned to 1e4. Left to itself the outer panel would
-# read 1e5 against the inset's 1e4, and the two could not be compared by eye.
 set_fixed_exp(ax, exp=4, fontsize=FS_TICK)
 
 # inset: upper right of (b), enlarging the lower tail where the two lowest
@@ -354,9 +277,6 @@ axi.set_zorder(8)
 axi.patch.set_alpha(1.0)
 axi.scatter(_x, _y, s=S_BASE / 2, color=C_OTHER, alpha=0.6,
             edgecolor='white', linewidth=0.2)
-# The inset's reference-line labels are set at the same size as the one on (b),
-# not at the inset's own tick size: they carry the same information, so they
-# should not read as a smaller class of label.
 draw_eui_refs(axi, EUI_LINES_INSET, X_MAX, YI_MAX, FS_ANNOT, linewidth=0.8)
 axi.scatter(hl_en['gfa'], hl_en['energy'], s=26, color=C_LOW, zorder=6)
 axi.scatter(hl_band['gfa'], hl_band['energy'], s=34, facecolor='none',
@@ -369,8 +289,6 @@ axi.yaxis.set_major_locator(MaxNLocator(nbins=4))
 axi.tick_params(labelsize=FS_INSET_TICK)
 axi.xaxis.get_offset_text().set_fontsize(FS_INSET_TICK)
 set_fixed_exp(axi, exp=4, fontsize=FS_INSET_TICK)
-# The label sits in the top-right corner, the only part of the inset that no
-# reference line or point runs through.
 axi.text(0.98, ENERGY_MIN / YI_MAX + 0.02, f'{ENERGY_MIN:,} kWh',
          transform=axi.transAxes, fontsize=FS_ANNOT, ha='right', color=C_LOW)
 
@@ -388,10 +306,6 @@ handles = [
     Line2D([], [], linestyle=REF_DASH, color=C_REF,
            label='EUI reference lines'),
 ]
-# Explicit margins rather than tight_layout: tight_layout sizes each column to
-# its own tick labels, and with a square box aspect the two panels then come out
-# at different heights, which puts their titles at different heights. Equal
-# columns by construction keeps the two titles on one line.
 fig.subplots_adjust(left=0.09, right=0.97, top=0.90, bottom=0.12, wspace=0.30)
 fig.legend(handles=handles, loc='center left', bbox_to_anchor=(0.995, 0.5),
            frameon=False, fontsize=FS_LEGEND)
@@ -409,14 +323,9 @@ if not os.path.exists(_fp_fin):
     )
 
 d5 = pd.read_excel(_fp_fin)
-bn(f'[Figure 5] input {os.path.basename(_fp_fin)}: '
-   f'{d5[YKIHO].nunique():,} institutions')
 
-# The manually excluded institutions are no longer in the final file, so they
-# are read back from before_preprocessing and appended for marking only.
-#   dist_err only: those are the points this figure is about - the matching is
-#   sound, so the plotted position is itself the finding. A mat_err institution
-#   was found on the matching, so its coordinates here mean nothing.
+# Institutions removed as atypical (dist_err), read back from
+# before_preprocessing for marking.
 _po = manual_exclusion_types(exclusion_csv)['dist_err']
 _fp_pre = os.path.join(data_dir,
                        final_filename('before_preprocessing', date, hira, 'all'))
@@ -426,8 +335,6 @@ if _po and os.path.exists(_fp_pre):
     po_rows = _pre[_pre[YKIHO].astype(str).isin(_po)].copy()
     if len(po_rows):
         po_rows['totarea_adj'] = totarea_adj(po_rows)
-bn(f'  manually excluded institutions added back for marking: '
-   f'{po_rows[YKIHO].nunique() if len(po_rows) else 0}')
 
 keep = ['ykiho', 'totarea_adj', 'bed_cnt', 'hos_ty_eng', f'site_sum_{fig_year}']
 d5 = pd.concat([d5[keep], po_rows[keep]], ignore_index=True) if len(po_rows) \
@@ -441,21 +348,19 @@ d5['bed_eui'] = d5[f'site_sum_{fig_year}'] / d5['bed_cnt']
 # too few of them to read a distribution from on their own.
 d5['panel_ty'] = d5['hos_ty_eng'].replace({'TH': 'GH'})
 
-# Panel order is fixed, smallest typical scale first: H -> KH -> CH -> GH(TH).
-# Fixing it keeps the panels comparable between runs and between figures.
+# Panel order, smallest typical scale first: H -> KH -> CH -> GH(TH).
 PANEL_ORDER = ['H', 'KH', 'CH', 'GH']
 PANEL_LABEL = {'GH': 'GH(TH)'}
 
 d5['bed_bin'] = pd.cut(d5['bed_cnt'], bins=BED_BINS, labels=BED_LABELS,
                        include_lowest=True)
 
-# The PO label is offset below its circle by a share of the y span, so the gap
-# stays the same wherever the point sits.
+# The callout label (A1, A2, ...) is offset below its circle by a share of the
+# y span.
 _y_span = float(d5['bed_eui'].max() - d5['bed_eui'].min())
 _y_lo = float(d5['bed_eui'].min())
 
-# PO numbering follows the order of the exclusion list, so the labels stay
-# stable between runs.
+# Callout numbers follow the order of the exclusion list.
 MARK_ORDER = {y: i + 1 for i, y in enumerate(_po)}
 
 panels = [p for p in PANEL_ORDER if (d5['panel_ty'] == p).any()]
@@ -507,9 +412,6 @@ for ax, ty in zip(axes[0], panels):
 axes[0][0].set_ylabel(f'{fig_year} Site-bed EUI (kWh/bed·yr)', fontsize=FS_LABEL,
                       labelpad=LABEL_PAD)
 
-# One row of legend entries above the panel titles. It is anchored beyond the
-# figure edge and picked up by bbox_inches='tight' on saving, so the panels keep
-# their square shape.
 handles = [Line2D([], [], marker='o', linestyle='none', markersize=13,
                   color=BED_COLORS[l], label=f'{l} beds') for l in BED_LABELS]
 plt.tight_layout()
@@ -518,7 +420,5 @@ fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 1.02),
            handletextpad=0.4, columnspacing=1.6)
 save_fig('fig5_manual_check_bed_eui_by_type.png')
 
-bn('')
-write_body_numbers()
 
 print('\n[paper_figure] done')

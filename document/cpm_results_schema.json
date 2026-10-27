@@ -1,0 +1,129 @@
+{
+  "title": "Change-point model parameters",
+  "description": "Column definitions of cpm_results_{N}.csv: one row per institution (idx), two-year subperiod and energy source",
+  "fields": [
+    {
+      "name": "idx",
+      "type": "integer",
+      "unit": "–"
+    },
+    {
+      "name": "subperiod",
+      "type": "string",
+      "unit": "–"
+    },
+    {
+      "name": "source",
+      "type": "string",
+      "unit": "–"
+    },
+    {
+      "name": "cpm_ty",
+      "type": "string",
+      "unit": "–"
+    },
+    {
+      "name": "base",
+      "type": "number",
+      "unit": "kWh/month"
+    },
+    {
+      "name": "htg_slope",
+      "type": "number",
+      "unit": "kWh/(month·℃)"
+    },
+    {
+      "name": "htg_cp",
+      "type": "number",
+      "unit": "℃"
+    },
+    {
+      "name": "clg_slope",
+      "type": "number",
+      "unit": "kWh/(month·℃)"
+    },
+    {
+      "name": "clg_cp",
+      "type": "number",
+      "unit": "℃"
+    },
+    {
+      "name": "ns",
+      "type": "integer",
+      "unit": "count"
+    },
+    {
+      "name": "rmse",
+      "type": "number",
+      "unit": "kWh/month"
+    },
+    {
+      "name": "cvrmse",
+      "type": "number",
+      "unit": "%"
+    },
+    {
+      "name": "nmbe",
+      "type": "number",
+      "unit": "%"
+    },
+    {
+      "name": "r2",
+      "type": "number",
+      "unit": "–"
+    }
+  ],
+  "missingValues": [
+    ""
+  ],
+  "besig_correspondence": [
+    {
+      "column": "base",
+      "1p": "b0",
+      "3p_h": "b0",
+      "3p_c": "b0",
+      "5p": "b0"
+    },
+    {
+      "column": "htg_slope",
+      "3p_h": "b1",
+      "5p": "b1"
+    },
+    {
+      "column": "htg_cp",
+      "3p_h": "b2",
+      "5p": "b3"
+    },
+    {
+      "column": "clg_slope",
+      "3p_c": "b1",
+      "5p": "b2"
+    },
+    {
+      "column": "clg_cp",
+      "3p_c": "b2",
+      "5p": "b4"
+    }
+  ],
+  "equations": [
+    {
+      "cpm_ty": "1p",
+      "equation": "E = base"
+    },
+    {
+      "cpm_ty": "3p_h",
+      "equation": "E = base + htg_slope × max(htg_cp − T, 0)"
+    },
+    {
+      "cpm_ty": "3p_c",
+      "equation": "E = base + clg_slope × max(T − clg_cp, 0)"
+    },
+    {
+      "cpm_ty": "5p",
+      "equation": "E = base + htg_slope × max(htg_cp − T, 0) + clg_slope × max(T − clg_cp, 0)"
+    }
+  ],
+  "notes": [
+    "E: monthly consumption (kWh); T: monthly mean outdoor temperature (℃). A parameter that the model type does not have is empty."
+  ]
+}

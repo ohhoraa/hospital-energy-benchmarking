@@ -9,25 +9,6 @@ data_output/
 figures/
 
 # ---------------------------------------------------------------------------
-# The real manual exclusion list holds ykiho values, which are pseudonymous
-# keys that can be resolved to named institutions through public
-# health-insurance data. Only the template is distributed.
-# ---------------------------------------------------------------------------
-manual_exclusions.csv
-manual_exclusions_test.csv
-
-# ---------------------------------------------------------------------------
-# Personal working notes kept alongside the code but not part of the release.
-# ---------------------------------------------------------------------------
-_*.md
-
-# ---------------------------------------------------------------------------
-# Figures made only for the response to reviewers; not part of the release
-# pipeline and not wired into run_all_merge.py.
-# ---------------------------------------------------------------------------
-response_figure.py
-
-# ---------------------------------------------------------------------------
 # BE-sig, downloaded at the pinned commit on the first run with CPM = True.
 # ---------------------------------------------------------------------------
 third_party/

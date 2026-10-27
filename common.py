@@ -7,10 +7,10 @@ Used by S1_SB_merge / S1_MB_merge / S2_clean / S3_combine.
 Terminology
 -----------
 scope = 'SB' | 'MB'
-  SB = Single Building    : one building register record = one institution
+  SB = Single Building    : one building record = one institution
                             (HIRA match_level CASE102)
-  MB = Multiple Buildings : one master building record + its member building
-                            records (HIRA match_level CASE101)
+  MB = Multiple Buildings : one master building record + its building records
+                            (HIRA match_level CASE101)
 
 Only single-institution configurations (SB-SI, MB-SI) are retained.
 """
@@ -23,7 +23,7 @@ import pandas as pd
 # =============================================================================
 # 0. Constants
 # =============================================================================
-# Principal-use code for medical facilities. The source register mixes
+# Primary-use code for medical facilities. The source registry mixes
 # zero-padded and non-padded codes, so both spellings are accepted.
 MAIN_PURPS_CDS = ['09000', '9000']
 
@@ -34,12 +34,6 @@ MODEL_TY_SB_MI = 'SB-MI'
 MODEL_TY_MB_SI = 'MB-SI'
 MODEL_TY_MB_MI = 'MB-MI'
 
-# HIRA institution type name (cl_cd_nm) -> English abbreviation (hos_ty_eng).
-#   GH General / H Hospital / CH Long-term care / KH Korean medicine
-#   DH Dental / TH Tertiary general
-#   The March 2020 release does not report psychiatric hospitals as a type of
-#   their own - they are reported as long-term care hospitals (CH). Later
-#   releases separate them; add the entry here if one is used.
 HOS_TY_LABEL_MAP = {
     '종합병원': 'GH',
     '병원': 'H',
@@ -140,10 +134,6 @@ except ImportError:
 def col_counts(df, col, label, step):
     """Print the number of distinct values at one step and record it.
 
-    label : console text, which names the column the count refers to
-    step  : row key of the count table. Labels that vary by scope (they embed
-            the primary-key name or the model_ty value) must pass a normalised
-            `step`, otherwise one step is split across two rows of the table.
     """
     print(f'{label} : {df[col].nunique(dropna=True)}')
     if _USE_COUNTER:
@@ -153,8 +143,6 @@ def col_counts(df, col, label, step):
 def make_counter(pk_col):
     """Return a function that prints both counts (building PK and institution).
 
-    The console label states which column each count refers to, while the count
-    table keys on `step` alone so that one step occupies one row.
     """
     def _print_counts(df, label, step=None):
         key = step if step is not None else label
@@ -167,14 +155,13 @@ def make_counter(pk_col):
 # 3. Manual exclusion list
 # =============================================================================
 # What the manual inspection found. Both types are removed; they are kept apart
-# because they are different findings and are read off different views.
+# because they are different findings.
 #   mat_err  : matching error. The institution is linked to a building that
 #              belongs to a different facility, or to only part of its own, so
 #              the floor area and the energy do not describe the same thing.
-#   dist_err : distribution error. The matching is sound, but the institution
-#              sits where no operating institution can sit in the joint
-#              distributions (bed-based intensity against floor area), so the
-#              underlying record is taken to be wrong.
+#   dist_err : atypical. The matching is sound, but the institution lies far
+#              from the rest of its type in the joint distribution (bed-based
+#              intensity against floor area).
 LIST_TYPES = ('mat_err', 'dist_err')
 
 
@@ -238,9 +225,8 @@ MANUAL_EXCLUSION_STEP = 'after manual exclusion'
 def drop_manual_exclusions(df, ykiho_list, print_counts=None, list_ty_map=None):
     """Remove the listed institutions and report how many were removed.
 
-    list_ty_map : {ykiho: list_ty}. Only used to break the removal down by
-                  type in the log, so that the two findings stay distinguishable
-                  in the run output.
+    list_ty_map : {ykiho: list_ty}, used to break the removal down by type in
+                  the log.
     """
     df_out = df.copy()
     print(f'[manual] before = {len(df_out):,}')
@@ -262,9 +248,9 @@ def drop_manual_exclusions(df, ykiho_list, print_counts=None, list_ty_map=None):
 
 
 # =============================================================================
-# 4. Building register: derived values and corrections
+# 4. Building registry: derived values and corrections
 # =============================================================================
-# Gap above which the master-record floor area and the summed member records
+# Gap above which the master-record floor area and the summed building records
 # are taken to cover different sets of buildings (about one building's worth).
 TOTAREA_GAP = 500
 
@@ -272,17 +258,11 @@ TOTAREA_GAP = 500
 def totarea_adj(df):
     """Corrected gross floor area, released as `gfa`.
 
-    For an MB record the master-register floor area is compared with the sum of
-    its member building records; a gap of at least TOTAREA_GAP m2 means the two
+    For an MB record the master-record floor area is compared with the sum of
+    its building records; a gap of at least TOTAREA_GAP m2 means the two
     totals cover different sets of buildings, so the larger (more complete)
-    value is taken. An SB record holds a single register record and has nothing
+    value is taken. An SB record holds a single building record and has nothing
     to compare against, so the raw value is kept.
-
-    The scope is read row by row from model_ty, so a frame that mixes SB and MB
-    rows (the S3 concatenation, which paper_figure.py reads) is handled as well
-    as a single-scope frame. bld_area_total is produced by S1_MB only, so an
-    SB-only frame does not carry it; its absence leaves every row on the raw
-    value, which is the intended SB behaviour.
     """
     tot = pd.to_numeric(df['totarea'], errors='coerce')
     if 'bld_area_total' in df.columns:
@@ -297,7 +277,8 @@ def totarea_adj(df):
 
 
 def add_totarea_abs_error(df):
-    """Absolute relative error between gfa (totarea) and gfa_r.
+    """Absolute relative error between totarea and vl_rat_estm_totarea
+    (gfa, gfa_r).
 
     Written to totarea_abs_error. NaN when either value is zero or missing
     (avoids division by zero). S2 screening keeps rows below 0.99, which
@@ -314,8 +295,7 @@ def add_totarea_abs_error(df):
     return df
 
 
-# A building coverage ratio above 100% is impossible by definition, so it is a
-# bound rather than a tunable threshold.
+# A building coverage ratio cannot exceed 100% by definition.
 BC_RAT_MAX = 100
 
 
@@ -348,9 +328,9 @@ def clean_bc_rat(df):
 def grnd_flr_invalid(s):
     """Above-ground floor count is invalid when it is <= 0 or missing.
 
-    Applied to grnd_flr_max for both scopes. For SB the building register holds
-    a single record, so the maximum equals the raw value; for MB an institution
-    is removed only when every member record is invalid.
+    Applied to grnd_flr_max for both scopes. For SB there is a single building
+    record, so the maximum equals the raw value; for MB an institution is
+    removed only when every building record is invalid.
     """
     return (s <= 0) | s.isna()
 
@@ -365,13 +345,10 @@ EN_TY_MIN_SHARE = 0.001   # share of the annual total
 
 
 def classify_energy_hybrid(df, g_col, h_col, sum_col, ty_col):
-    """Classify the combination of energy sources in use (E / EG / EH / EGH).
+    """Classify the composition of energy sources in use (E / EG / EH / EGH).
 
-    A source counts as "in use" when its absolute annual consumption reaches
-    EN_TY_MIN_KWH or when its share of total consumption reaches
-    EN_TY_MIN_SHARE. An absolute rule alone misses small quantities at large
-    hospitals; a share rule alone misses real use at small ones, so the two are
-    combined with OR.
+    A source is in use when its annual consumption reaches EN_TY_MIN_KWH or
+    its share of the total reaches EN_TY_MIN_SHARE.
     """
     out = df.copy()
     g_used = ((out[g_col] >= EN_TY_MIN_KWH)
@@ -379,8 +356,6 @@ def classify_energy_hybrid(df, g_col, h_col, sum_col, ty_col):
     h_used = ((out[h_col] >= EN_TY_MIN_KWH)
               | ((out[h_col] / out[sum_col]) >= EN_TY_MIN_SHARE))
 
-    #   The two flags are booleans, so the three conditions plus the default
-    #   cover every row: neither source in use is electricity only.
     out[ty_col] = np.select(
         [g_used & h_used, g_used & ~h_used, ~g_used & h_used],
         ['EGH', 'EG', 'EH'],
@@ -390,7 +365,7 @@ def classify_energy_hybrid(df, g_col, h_col, sum_col, ty_col):
 
 
 def add_en_ty_and_flag(df, pk_col, year_b, year_a):
-    """Per-year energy-source combination plus a two-year agreement flag.
+    """Per-year energy-source composition plus a two-year agreement flag.
 
     flag_en_ty_{b}_{a} : 0 identical / 1 different / 2 either year missing
     A change in the set of energy sources between the two years suggests a
@@ -413,8 +388,6 @@ def add_en_ty_and_flag(df, pk_col, year_b, year_a):
     flag_col = f'flag_en_ty_{year_b}_{year_a}'
     col_b, col_a = f'en_ty_{year_b}', f'en_ty_{year_a}'
 
-    #   Created as an integer column and only ever assigned 0, 1 or 2 through
-    #   the masks below, so no fill is needed.
     df[flag_col] = 0
     df.loc[df[col_a].isna() | df[col_b].isna(), flag_col] = 2
     df.loc[df[col_a].notna() & df[col_b].notna() & (df[col_a] != df[col_b]), flag_col] = 1
@@ -429,11 +402,6 @@ def add_comp_ratio_flag(df, year_b, year_a):
     flag_comp_5_{b}_{a} : 0 within 0.2-5 / 1 below 0.2 or above 5
                           2 the ratio is undefined, i.e. either year's total is
                             missing or zero
-    A fivefold change within a pair is more likely a metering or attribution
-    error than a real change in operation, so screening removes it. Screening
-    keeps flag == 0 only, so an undefined ratio is removed as well; it is
-    flagged 2 rather than 1 so that the two reasons stay distinguishable, which
-    mirrors add_en_ty_and_flag.
     """
     df = df.copy()
     col_b, col_a = f'site_sum_{year_b}', f'site_sum_{year_a}'
@@ -444,9 +412,6 @@ def add_comp_ratio_flag(df, year_b, year_a):
                 & (df[col_a] != 0) & (df[col_b] != 0))
     df[ratio_col] = np.where(_defined, df[col_a] / df[col_b], np.nan)
 
-    #   pd.cut leaves an undefined ratio outside every bin, so the categorical
-    #   is filled with 2 before the integer cast. Casting first would raise on
-    #   the NaN category.
     df[flag_col] = (
         pd.cut(df[ratio_col],
                bins=[0, 0.2, 5, float('inf')],

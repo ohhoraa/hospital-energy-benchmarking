@@ -26,7 +26,6 @@ jobs:
 
       - name: Prepare the run
         run: |
-          cp document/manual_exclusions_format.csv data_raw/manual_exclusions.csv
           sed -i "s/^CPM = True$/CPM = ${{ matrix.cpm }}/" run_all_merge.py
           grep -n "^CPM = " run_all_merge.py
 
@@ -36,11 +35,13 @@ jobs:
       - name: Check the outputs
         run: |
           grep -q "final N = 2" run.log
-          test -f data_output/hospital_energy_benchmarking_2.csv
+          test -f data_output/energy_benchmarking_2.csv
+          test -f data_output/cpm_results_2.csv
           test -f data_output/preprocessing_counts.xlsx
-          test -f data_output/table4_data_quality_2.xlsx
           test -f data_output/column_statistics_2.xlsx
           test -f figures/fig8_external_benchmarks.png
 
-      - name: Validate the release against the table schema
-        run: frictionless validate data_output/hospital_energy_benchmarking_2.csv --schema document/table_schema.json
+      - name: Validate the outputs against the table schemas
+        run: |
+          frictionless validate data_output/energy_benchmarking_2.csv --schema document/table_schema.json
+          frictionless validate data_output/cpm_results_2.csv --schema document/cpm_results_schema.json

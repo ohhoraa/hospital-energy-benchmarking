@@ -2,14 +2,15 @@
 """
 S3. Combination and release view.
 
-Part A. Concatenate the scopes : SB + MB row-wise, per sub-period and stage
+Part A. Concatenate the scopes : SB + MB row-wise, per subperiod and stage
                                  -> '{date} final_{step} {hira}_{yb}_{ya}.xlsx'
-Part B. Join the sub-periods   : 2018_2019 inner join 2020_2021 on the
+Part B. Join the subperiods    : 2018_2019 inner join 2020_2021 on the
                                  institution key
                                  -> '{date} final_{step} {hira}_all.xlsx'
 Part C. Release view           : from after_outlier, the released CSV with the
-                                 released variable names, plus its column
-                                 statistics -> data_output/
+                                 released variable names, the change-point
+                                 model parameters and the column statistics
+                                 -> data_output/
 
 Parts A and B write to data_prepared/; Part C writes to data_output/.
 
@@ -18,9 +19,6 @@ Variable naming
 Parts A and B do not rename anything: the pipeline keeps the source column
 names throughout (totarea_adj, vl_rat_estm_totarea and so on). The released
 names (gfa, gfa_r, ...) are applied only in the Part C release view.
-
-totarea_adj is created during S2 screening, so it does not exist in the
-before_preprocessing files. Part C uses after_outlier only.
 """
 
 import os
@@ -76,7 +74,7 @@ def build_column_statistics(dataframe):
         s = dataframe[col]
         non_null = s.dropna()
         rows.append({
-            'idx': i, 'column': col,
+            'position': i, 'column': col,
             'dtype': str(s.dtype),
             'max_length': (int(non_null.astype(str).str.len().max())
                            if len(non_null) else 0),
@@ -87,6 +85,23 @@ def build_column_statistics(dataframe):
         })
     return pd.DataFrame(rows)
 
+
+# Change-point model parameters: cpm_results_{N}.csv, one row per
+# institution x subperiod x energy source. Definitions in
+# document/cpm_results_schema.json.
+PARAM_COLS = ['idx', 'subperiod', 'source', 'cpm_ty',
+              'base', 'htg_slope', 'htg_cp', 'clg_slope', 'clg_cp',
+              'ns', 'rmse', 'cvrmse', 'nmbe', 'r2']
+
+# Released parameter name -> BE-sig parameter, per model type.
+CPM_MODELS = ('1p', '3p_h', '3p_c', '5p')
+BESIG_MAP = {
+    'base': {'1p': 'b0', '3p_h': 'b0', '3p_c': 'b0', '5p': 'b0'},
+    'htg_slope': {'3p_h': 'b1', '5p': 'b1'},
+    'htg_cp': {'3p_h': 'b2', '5p': 'b3'},
+    'clg_slope': {'3p_c': 'b1', '5p': 'b2'},
+    'clg_cp': {'3p_c': 'b2', '5p': 'b4'},
+}
 
 
 # =============================================================================
@@ -126,24 +141,20 @@ for year_b, year_a in year_pairs:
 
 
 # =============================================================================
-# 3. Part B - join the sub-periods
+# 3. Part B - join the subperiods
 # =============================================================================
-print(f'\n{"=" * 70}\n[S3] Part B: sub-period inner join\n{"=" * 70}')
+print(f'\n{"=" * 70}\n[S3] Part B: subperiod inner join\n{"=" * 70}')
 
 
-# Columns whose values differ between sub-periods although their names carry no
-# year. The change-point model outputs are suffixed by energy source only
-# (ns_11, r2_0, ...) and the fitting period (date_s, date_e) differs by
-# sub-period, so a sub-period suffix is added before the join to keep both.
-# Every other unsuffixed column (register and HIRA attributes, totarea_adj,
-# flr_*) has the same value in both sub-periods and is de-duplicated.
+# CPM columns (ns_11, r2_13, ...) and the fitting period (date_s, date_e)
+# differ by subperiod, so they get a subperiod suffix before the join.
 CPM_BASES = ('cpm_ty', 'b0', 'b1', 'b2', 'b3', 'b4',
              'ns', 'cvrmse', 'rmse', 'nmbe', 'r2')
 _CPM_RE = re.compile(r'^(' + '|'.join(CPM_BASES) + r')_\d+$')
 
 
 def pair_specific_cols(df):
-    """Columns that need a sub-period suffix (CPM values and fitting period)."""
+    """Columns that need a subperiod suffix (CPM values and fitting period)."""
     return [c for c in df.columns
             if _CPM_RE.match(str(c)) or str(c) in ('date_s', 'date_e')]
 
@@ -155,17 +166,17 @@ def add_pair_suffix(df, pair):
 
 
 def merge_year_pairs(df1, df2, pair1, pair2, key=YKIHO):
-    """Inner join the two sub-period frames on the institution key.
+    """Inner join the two subperiod frames on the institution key.
 
-    1) Suffix the CPM columns so that both sub-periods are preserved.
+    1) Suffix the CPM columns so that both subperiods are preserved.
     2) Drop the remaining duplicated names from df2, which would otherwise
-       produce _x/_y suffixes. Those columns are sub-period invariant, so df1
+       produce _x/_y suffixes. Those columns are subperiod invariant, so df1
        is kept as the representative.
     """
     d1, n1 = add_pair_suffix(df1, pair1)
     d2, n2 = add_pair_suffix(df2, pair2)
     if n1 or n2:
-        print(f'    sub-period suffix applied to {n1}/{n2} CPM columns '
+        print(f'    subperiod suffix applied to {n1}/{n2} CPM columns '
               f'({pair1} / {pair2})')
 
     common_cols = [c for c in d1.columns if c in d2.columns and c != key]
@@ -176,7 +187,7 @@ for step in STEPS:
     fps = [os.path.join(data_dir, final_filename(step, date, hira, f'{b}_{a}'))
            for b, a in year_pairs]
     if not all(os.path.exists(fp) for fp in fps):
-        print(f'[skip] {step}: sub-period files missing, no _all file written')
+        print(f'[skip] {step}: subperiod files missing, no _all file written')
         continue
 
     df1, df2 = (pd.read_excel(fp) for fp in fps)
@@ -203,15 +214,12 @@ for step in STEPS:
 #   - Renamed for the release: gfa, gfa_r, pu_rat, footprint_area, fa_rat,
 #     open_ymd, doctor_cnt.
 #   - Everything else keeps its source name.
-#   - cl_cd_nm is not released: it is the Korean-language institution type
-#     name and maps one to one onto hos_ty_eng, so it carries no extra
-#     information.
 #   - Identifiers, addresses, coordinates and matching metadata are not
 #     released, so that institutions cannot be identified.
 print(f'\n{"=" * 70}\n[S3] Part C: release view\n{"=" * 70}')
 
 RELEASE_COLS = {
-    # -- building configuration / register
+    # -- building configuration / registry
     'model_ty': 'model_ty',
     'plat_area': 'plat_area',
     'arch_area': 'footprint_area',
@@ -251,17 +259,20 @@ for _k in ('hdd', 'cdd'):
     for _y in (2018, 2019, 2020, 2021):
         RELEASE_COLS[f'{_k}_{_y}'] = f'{_k}_{_y}'
 
-# Number of variable types in the released file.
-RELEASE_N_TYPES_EXPECTED = 37
+# Energy source codes of the change-point model columns.
+SOURCE_CODES = {'11': 'elec', '12': 'gas', '13': 'heat'}
+
+# Number of variable types in the released file (idx included).
+RELEASE_N_TYPES_EXPECTED = 38
 
 _n_nonenergy = sum(
     1 for k in RELEASE_COLS
     if not any(k.startswith(p) for p in ('site_', 'pri_', 'hdd_', 'cdd_'))
 )
-_n_types = _n_nonenergy + len(_EN_KINDS) * 2 + 2
-print(f'[release] columns = {len(RELEASE_COLS)} (year suffixes included)')
-print(f'[release] variable types = {_n_types} '
-      f'(non-energy {_n_nonenergy} + energy {len(_EN_KINDS) * 2} + degree days 2)')
+_n_types = 1 + _n_nonenergy + len(_EN_KINDS) * 2 + 2
+print(f'[release] columns = {len(RELEASE_COLS) + 1} (idx and year suffixes included)')
+print(f'[release] variable types = {_n_types} (idx 1 + non-energy '
+      f'{_n_nonenergy} + energy {len(_EN_KINDS) * 2} + degree days 2)')
 if _n_types != RELEASE_N_TYPES_EXPECTED:
     print(f'  WARNING: {_n_types - RELEASE_N_TYPES_EXPECTED:+d} against the '
           f'expected {RELEASE_N_TYPES_EXPECTED} - check RELEASE_COLS.')
@@ -270,13 +281,52 @@ else:
 
 
 def build_release_view(df):
-    """Keep the RELEASE_COLS columns and rename them to the released names."""
+    """Keep the RELEASE_COLS columns, rename them to the released names and
+    put idx in front."""
     missing = [c for c in RELEASE_COLS if c not in df.columns]
     if missing:
         print(f'[release] {len(missing)} column(s) absent from the input and '
               f'therefore omitted: {missing}')
     keep = [c for c in RELEASE_COLS if c in df.columns]
-    return df[keep].rename(columns={k: RELEASE_COLS[k] for k in keep})
+    out = df[keep].rename(columns={k: RELEASE_COLS[k] for k in keep})
+    out.insert(0, 'idx', np.arange(1, len(out) + 1))
+    return out
+
+
+def build_cpm_results(df, idx):
+    """Long table of the fitted models: one row per institution (idx) x
+    subperiod x energy source with a model. Parameters are renamed from
+    BE-sig's b0 ... b4 by meaning (BESIG_MAP)."""
+    rows = []
+    for b, a in year_pairs:
+        for code, src in SOURCE_CODES.items():
+            sfx = f'_{code}_{b}_{a}'
+            if f'cpm_ty{sfx}' not in df.columns:
+                continue
+            sub = df[[c for c in df.columns if c.endswith(sfx)]].copy()
+            sub.columns = [c[:-len(sfx)] for c in sub.columns]
+            sub['idx'] = idx
+            sub = sub[sub['cpm_ty'].notna()]
+            for _, r in sub.iterrows():
+                row = {'idx': r['idx'], 'subperiod': f'{b}-{a}', 'source': src,
+                       'cpm_ty': r['cpm_ty']}
+                for name, by_model in BESIG_MAP.items():
+                    bk = by_model.get(r['cpm_ty'])
+                    row[name] = r.get(bk) if bk else np.nan
+                for f in ('ns', 'rmse', 'cvrmse', 'nmbe', 'r2'):
+                    row[f] = r.get(f)
+                rows.append(row)
+    out = pd.DataFrame(rows, columns=PARAM_COLS)
+    unknown = sorted(set(out['cpm_ty']) - set(CPM_MODELS))
+    if unknown:
+        print(f'[cpm parameters] WARNING: model type(s) {unknown} have no '
+              f'parameter mapping; their parameters are left empty')
+    out['ns'] = pd.to_numeric(out['ns'], errors='coerce').round().astype('Int64')
+    src_order = {s: i for i, s in enumerate(SOURCE_CODES.values())}
+    return (out.sort_values(['idx', 'subperiod', 'source'],
+                            key=lambda c: c.map(src_order) if c.name == 'source'
+                            else c)
+               .reset_index(drop=True))
 
 
 _fps = [os.path.join(data_dir, final_filename('after_outlier', date, hira,
@@ -284,7 +334,7 @@ _fps = [os.path.join(data_dir, final_filename('after_outlier', date, hira,
         for b, a in year_pairs]
 
 if not all(os.path.exists(fp) for fp in _fps):
-    print('[skip] Part C: after_outlier sub-period files missing')
+    print('[skip] Part C: after_outlier subperiod files missing')
 else:
     df_1819, df_2021 = (pd.read_excel(fp) for fp in _fps)
 
@@ -293,11 +343,10 @@ else:
     print(f'[release] {year_pairs[1][0]}_{year_pairs[1][1]} : '
           f'{df_2021[YKIHO].nunique():,} institutions / {len(df_2021):,} rows')
 
-    # Inner join: only institutions observed in both sub-periods, which is the
+    # Inner join: only institutions observed in both subperiods, which is the
     # population of the released dataset.
     _p1, _p2 = (f'{b}_{a}' for b, a in year_pairs)
     merged_inner = merge_year_pairs(df_1819, df_2021, _p1, _p2)
-    #   Format pinned: without it a time-only string parses to the run date.
     merged_inner['estb_dd'] = pd.to_datetime(merged_inner['estb_dd'],
                                              format='%Y-%m-%d', errors='coerce')
     _n_bad = int(merged_inner['estb_dd'].isna().sum())
@@ -305,32 +354,30 @@ else:
         print(f'[release] open_ymd: {_n_bad} unparsable opening date(s)')
     print(f'[release] inner join -> {len(merged_inner):,} rows')
 
+    # Release order: by institution key, so that idx is the same on every run.
+    merged_inner = merged_inner.sort_values(YKIHO).reset_index(drop=True)
     df_release = build_release_view(merged_inner)
+    df_param = build_cpm_results(merged_inner, df_release['idx'].values)
 
-    #   An unrecorded lot area is written as 0 by the building register, and
-    #   the two ratios derived from it follow. Converted after every filtering
-    #   and screening step: in S1 or S2 these institutions would be dropped
-    #   instead, because clean_bc_rat() keeps a row on 'bc_rat <= 100' and that
-    #   comparison is False for NaN.
+    #   An unrecorded lot area is 0 in the building register; it and the two
+    #   ratios derived from it are released as missing.
     ZERO_AS_MISSING = ['plat_area', 'bc_rat', 'fa_rat']
     _zero = {c: (df_release[c] == 0) for c in ZERO_AS_MISSING
              if c in df_release.columns}
     for _c, _m in _zero.items():
         df_release.loc[_m, _c] = np.nan
-    if _zero:
-        _same = len({tuple(m) for m in _zero.values()}) == 1
-        print(f'[release] zeros -> missing: '
-              f'{ {c: int(m.sum()) for c, m in _zero.items()} }'
-              f'{"" if _same else "   WARNING: not the same rows"}')
 
     n_rel = len(df_release)
     print(f'[release] {n_rel:,} rows, {df_release.shape[1]} cols')
 
     if save_release_csv:
         rel_csv = os.path.join(output_dir,
-                               f'hospital_energy_benchmarking_{n_rel}.csv')
+                               f'energy_benchmarking_{n_rel}.csv')
         df_release.to_csv(rel_csv, index=False, encoding='utf-8-sig')
-        print(f'[save] {os.path.basename(rel_csv)}')
+        par_csv = os.path.join(output_dir, f'cpm_results_{n_rel}.csv')
+        df_param.to_csv(par_csv, index=False, encoding='utf-8-sig')
+        print(f'[save] {os.path.basename(rel_csv)}, '
+              f'{os.path.basename(par_csv)} ({len(df_param):,} rows)')
     else:
         print('[skip] release CSV (SAVE_RELEASE_CSV = False)')
 

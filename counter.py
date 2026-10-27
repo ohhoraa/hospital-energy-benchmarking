@@ -1,33 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Step-by-step record counter.
+Step-by-step record counter, written to preprocessing_counts.xlsx by
+run_all_merge.py.
 
-Every call to `col_counts` / `print_counts` accumulates a count in the
-background; `run_all_merge.py` writes the accumulated table to
-`preprocessing_counts.xlsx` at the end of the run.
-
-Two sheets are produced:
-  counts : every step, with the counts for each scope and sub-period
+  counts : every step, with the counts for each scope and subperiod
   table2 : the filtering steps only, in the order they are applied, as
            institution totals over both scopes
-
-One step = one row. Scope (SB / MB), sub-period and count type are columns, so
-a step applied to both scopes still occupies a single row.
-
-Usage
------
-In S2:
-    import counter
-    counter.set_context(scope='SB', year_pair='2018_2019')
-    counter.current_section = 'screening'   # start of the screening block
-
-In run_all_merge:
-    counter.reset()
-    # ... run S2 / S3 ...
-    counter.export_to_excel(path)
-
-Note: `log()` returns silently when no context has been set, so
-`set_context()` must be called before any counting.
 """
 
 import os
@@ -46,8 +24,8 @@ TABLE2_SPEC = [
     ('model_ty == single-institution (*-SI) retained', '-',
      'After two-stage integration: (i) medical institutions, and '
      '(ii) single-institution configurations only'),
-    ('opened on or before 1 January 2018', 'Data limitation',
-     'Institutions that opened on or before 1 January 2018'),
+    ('opened before 1 January 2018', 'Data limitation',
+     'Institutions that opened before 1 January 2018'),
     ('pu_rat >= 75 retained', 'Operational',
      'Institutions with pu_rat >= 75%'),
     ('no privately owned units', 'Operational',
@@ -85,7 +63,7 @@ _seq = 0
 # Context
 # ============================================================
 def set_context(scope, year_pair):
-    """Declare the current execution unit (scope x sub-period). Required."""
+    """Declare the current execution unit (scope x subperiod). Required."""
     global _context, current_section
     _context['scope'] = scope
     _context['year_pair'] = year_pair
@@ -93,8 +71,7 @@ def set_context(scope, year_pair):
 
 
 def reset():
-    """Called at the start of a run. Clears the context as well, so that a
-    previous scope or sub-period cannot leak into the wrong column."""
+    """Called at the start of a run. Clears the context as well."""
     global _records, _seq
     _records = {}
     _seq = 0
@@ -123,7 +100,7 @@ def log(df, pk_col, step):
 
     pk_col : 'mgm_upper_bld_pk' (MB) / 'mgm_bld_pk' (SB) / 'ykiho'
     step   : row key of the table. Labels that vary by scope (they embed the
-             primary-key name or the model_ty value) must be normalised by the
+             primary-key name or the model_ty value) must be normalized by the
              caller, otherwise one step is split across two rows.
     """
     global _seq
@@ -149,10 +126,8 @@ def log(df, pk_col, step):
 
 
 def log_merge_step(label, total_inst, note=''):
-    """Add one row for the S3 concatenation / sub-period join results.
+    """Add one row for the S3 concatenation / subperiod join results.
 
-    Always recorded in the 'merge' section, which is where every caller of this
-    function belongs.
     """
     global _seq
     if label not in _records:
@@ -183,7 +158,7 @@ def _count_columns():
 
 
 def _year_pairs_in(count_cols):
-    """Extract the sub-periods present, preserving their order."""
+    """Extract the subperiods present, preserving their order."""
     seen = []
     for c in count_cols:
         pair = '_'.join(c.split('_')[1:3])
@@ -280,7 +255,7 @@ def _build_table2():
     """Filtering steps only, in the order they are applied, as institution
     totals.
 
-    Columns: Type / Filter / one column per sub-period.
+    Columns: Type / Filter / one column per subperiod.
     """
     pairs = _year_pairs_in(_count_columns())
     if not pairs:

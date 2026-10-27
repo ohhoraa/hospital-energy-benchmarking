@@ -3,7 +3,7 @@
 S1_SB_merge. Single-building (SB) integration.
 
 Scope : HIRA match_level == 'CASE102'
-        one institution matched to one building register record
+        one institution matched to one building record
         -> Single Building (SB)
 
 Merge order : building record + floor summary (pu_rat) + HIRA
@@ -11,11 +11,6 @@ Merge order : building record + floor summary (pu_rat) + HIRA
               (CPM = True: energy -> weather, then the CPM is fitted here)
 Primary key : mgm_bld_pk
 Output      : '{date} df_SB_merge_before_preprocessing {hira}_{yb}_{ya}.xlsx'
-              (the file-name rule lives in common.step_filename)
-
-SB and MB are kept as separate scripts because they read different source
-files, use different HIRA match levels, and MB additionally aggregates its
-member building records. Only the shared helpers live in common.py.
 """
 
 import os
@@ -75,7 +70,7 @@ if 'raw_bld_file' not in globals():
 if 'raw_purps_path' not in globals():
     raw_purps_path = os.path.join(data_dir, f'{date} pu_rat.txt')
 
-# Building register, building records (all uses).
+# Building registry, building records (all uses).
 if 'raw_bld' not in globals():
     raw_bld = pd.read_csv(os.path.join(data_dir_in, raw_bld_file),
                           delimiter='|', encoding='cp949')
@@ -84,9 +79,6 @@ if 'parking_file' not in globals():
     parking_file = None
 
 # Floor summary aggregation produced by pu_rat.py.
-#   pu_rat = medical-use floor area / (total floor area - parking) * 100
-#   Parking is excluded on the basis of the registered use being a car park or
-#   a garage, regardless of the floor position.
 if 'raw_purps' not in globals():
     # The file carries a header, so columns are selected by name.
     raw_purps = pd.read_csv(raw_purps_path, delimiter='|', encoding='utf-8-sig')
@@ -143,8 +135,6 @@ if cpm:
             os.path.join(data_dir, 'after_building-monthly.csv'),
             encoding='utf-8-sig',
             dtype={'key': str, 'engy_kind_cd': str, 'use_ym': str},
-            # Exact round trip of the kWh values: the default parser can
-            # change the last digit, and the fitted coefficients respond to it.
             float_precision='round_trip')
 else:
     cpm_pair = pd.read_csv(
@@ -169,8 +159,7 @@ def merge_bld(base_df, df_cpm, df_en, df_w, on_key):
     """Merge CPM -> energy -> weather and report the counts at each step.
 
     CPM and energy are inner joins (an institution without both cannot be
-    analysed); weather is a left join, since it matches on region and is always
-    available.
+    analyzed); weather is a left join on the beopjeong-dong.
     """
     print('\n--- merge ---')
 
@@ -202,8 +191,8 @@ print(f'mgm_bld_pk {merge0["mgm_bld_pk"].nunique()} / '
 
 df_merge0 = merge_bld(merge0, cpm_pair, energy_pair, weather, on_key='mgm_bld_pk')
 
-# CPM = True: fit the change-point models of the buildings left here, two
-# years at a time, and add them (see cpm_besig.attach_cpm).
+# CPM = True: fit the change-point models of the buildings left here, per
+# subperiod, and add them (see cpm_besig.attach_cpm).
 if cpm:
     import cpm_besig
     df_merge0 = cpm_besig.attach_cpm(
@@ -228,20 +217,17 @@ df_merge0['model_ty'] = np.where(df_merge0['hos_per_pk'] == 1,
 
 
 # =============================================================================
-# 5. Derived: building register
+# 5. Derived: building registry
 # =============================================================================
-# Absolute relative error between gfa and gfa_r (S2 removes rows >= 0.99).
+# Absolute relative error between totarea and vl_rat_estm_totarea (gfa, gfa_r).
 df_merge0 = add_totarea_abs_error(df_merge0)
 
-# Floor-count variable names.
-#   SB holds a single record, so the maximum equals the raw value. Using the
-#   same names as the MB aggregation lets S2 be a single script.
+# Floor-count variable names, as in the MB aggregation. SB holds a single
+# record, so the maximum equals the raw value.
 df_merge0 = df_merge0.rename(columns={
     'grnd_flr_cnt': 'grnd_flr_max',
     'ugrnd_flr_cnt': 'ugrnd_flr_max',
 })
-#   Int64 so that the S3 concatenation with MB, which is nullable for the same
-#   reason, does not fall back to float.
 df_merge0['ugrnd_flr_max'] = df_merge0['ugrnd_flr_max'].astype('Int64')
 
 # Optional: parking area (source columns mgm_bld_pk / sido_cd /
@@ -260,7 +246,7 @@ if parking_file:
 # =============================================================================
 # 6. Derived: energy
 # =============================================================================
-# Energy-source combination and its two-year agreement flag.
+# Energy-source composition and its two-year agreement flag.
 df_merge0 = add_en_ty_and_flag(df_merge0, pk_col='mgm_bld_pk',
                                year_b=year_b, year_a=year_a)
 # Two-year consumption ratio and its outlier flag.

@@ -4,12 +4,11 @@ cpm_besig. Change-point models fitted with BE-sig (CPM = True), called from
 S1_SB_merge.py / S1_MB_merge.py through attach_cpm().
 
 BE-sig is downloaded at the pinned commit into third_party/ on the first run.
-For each building left after the S1 merge and each sub-period, one model is
-fitted per energy source (11, 12, 13) and for their sum (0), on the monthly
-kWh of the months with a record. Settings: candidate models 1p, 3p_h, 3p_c,
-5p; lowest RMSE; multistart, 10 starts, seed 0; 4 decimals. The baseload /
-heating / cooling components are the split of the model prediction. See
-README.md for details.
+For each building left after the S1 merge and each subperiod, one model is
+fitted per energy source (11, 12, 13), on the monthly kWh of the months with a
+record. Settings: candidate models 1p, 3p_h, 3p_c, 5p; lowest RMSE; multistart,
+10 starts, seed 0; 4 decimals. The baseload / heating / cooling components are
+the split of the model prediction. See README.md for details.
 """
 
 import os
@@ -31,10 +30,8 @@ N_STARTS = 10
 SEED = 0
 ROUND_DIGITS = 4
 
-# Energy source codes as text ('11', '12', '13'), plus '0' for the sum of the
-# three. '0' is the suffix the CPM columns of the sum carry in S2 (ns_0, r2_0).
+# Energy source codes as text.
 KINDS = ('11', '12', '13')
-TOTAL = '0'
 
 # Fields written per energy source (column name = {field}_{kind}).
 CPM_FIELDS = ['cpm_ty', 'b0', 'b1', 'b2', 'b3', 'b4',
@@ -152,11 +149,10 @@ def _fit_series(months, y, station):
 
 
 def _job(args):
-    """One building key x one sub-period -> rows for the four series."""
+    """One building key x one subperiod -> rows for the three series."""
     key, period, station, g = args
     series = {k: v.groupby('use_ym')['kwh'].sum()
               for k, v in g.groupby('engy_kind_cd')}
-    series[TOTAL] = g.groupby('use_ym')['kwh'].sum()
     rows = []
     for kind, s in series.items():
         row = {'key': key, 'period': period, 'kind': kind, 'station': station}
@@ -168,23 +164,22 @@ def _job(args):
             rows.append({**row, 'error': str(e)[:200]})
             continue
         row.update(rec)
-        if kind != TOTAL:
-            # Annual components of the metered sources.
-            comp['year'] = comp['ym'].str[:4]
-            for yr, gg in comp.groupby('year'):
-                for c in ('base', 'htg', 'clg'):
-                    row[f'{c}_{yr}'] = float(gg[c].sum())
+        # Annual components.
+        comp['year'] = comp['ym'].str[:4]
+        for yr, gg in comp.groupby('year'):
+            for c in ('base', 'htg', 'clg'):
+                row[f'{c}_{yr}'] = float(gg[c].sum())
         rows.append(row)
     return rows
 
 
 def fit_all(usage, stations, year_pairs, third_party_dir, n_jobs=None):
-    """Fit every target key and sub-period.
+    """Fit every target key and subperiod.
 
     usage     monthly records of the target keys, columns
               key, engy_kind_cd ('11'/'12'/'13'), use_ym ('YYYYMM'), kwh
     stations  {key: KMA station code}
-    Returns one row per key x sub-period x energy source with the fitted
+    Returns one row per key x subperiod x energy source with the fitted
     values and the annual components (base_{year}, htg_{year}, clg_{year}).
     """
     weather_dir = fetch_besig(third_party_dir)
@@ -207,7 +202,7 @@ def fit_all(usage, stations, year_pairs, third_party_dir, n_jobs=None):
     interactive = hasattr(sys, 'ps1') or 'spyder_kernels' in sys.modules
     if interactive:
         n_jobs = 1
-    print(f'[CPM] {len(jobs):,} fits (key x sub-period), '
+    print(f'[CPM] {len(jobs):,} fits (key x subperiod), '
           f'{no_station:,} key(s) without a station skipped, '
           f'{n_jobs} process(es)', flush=True)
 
@@ -239,10 +234,10 @@ def fit_all(usage, stations, year_pairs, third_party_dir, n_jobs=None):
 
 
 def to_wide(res, pk_out, period):
-    """Rows of one sub-period -> one row per key, columns {field}_{kind}.
+    """Rows of one subperiod -> one row per key, columns {field}_{kind}.
 
     Same layout as the CPM files the pipeline reads with CPM = False (ns_11,
-    r2_0, ...), plus the fitting period in date_s / date_e.
+    r2_13, ...), plus the fitting period in date_s / date_e.
     """
     yb, ya = period.split('_')
     r = res[res['period'] == period]
@@ -256,7 +251,7 @@ def to_wide(res, pk_out, period):
     wide.insert(2, 'date_e', f'x{ya}12')
     # Every field for every source, so S2 always finds ns_13, r2_13 and so on.
     for f in CPM_FIELDS:
-        for k in (TOTAL,) + KINDS:
+        for k in KINDS:
             if f'{f}_{k}' not in wide.columns:
                 wide[f'{f}_{k}'] = np.nan
     return wide
@@ -264,10 +259,10 @@ def to_wide(res, pk_out, period):
 
 def components_long(res, year_pairs):
     """Annual components per key x source x year, from the fit of the
-    sub-period that contains the year. Columns: key, engy_kind_cd, year,
+    subperiod that contains the year. Columns: key, engy_kind_cd, year,
     base, htg, clg (kWh)."""
     out = []
-    metered = res[res['kind'] != TOTAL]
+    metered = res
     for yb, ya in year_pairs:
         r = metered[metered['period'] == f'{yb}_{ya}']
         for y in (yb, ya):
@@ -292,14 +287,14 @@ def attach_cpm(df, pk, monthly, pair, third_party_dir, n_jobs=None,
                out_csv=None):
     """Fit the buildings of one S1 table and add the results to it.
 
-    df       S1 table of one scope and one sub-period (after the merge)
+    df       S1 table of one scope and one subperiod (after the merge)
     pk       its building key ('mgm_bld_pk' or 'mgm_upper_bld_pk')
     monthly  S0 monthly series (after_*-monthly.csv): key, engy_kind_cd,
              use_ym, kwh
     pair     (year_b, year_a)
     out_csv  where to keep every fitted series, for checking
 
-    Returns the table with the CPM columns ({field}_{0|11|12|13}, date_s,
+    Returns the table with the CPM columns ({field}_{11|12|13}, date_s,
     date_e) and the components replaced; rows without any fit are removed.
     """
     from common import (SOURCE_SUFFIX, SOURCE_TOTAL, add_component_totals)
@@ -316,8 +311,7 @@ def attach_cpm(df, pk, monthly, pair, third_party_dir, n_jobs=None,
     if out_csv:
         res.to_csv(out_csv, index=False, encoding='utf-8-sig')
 
-    # CPM columns, placed where the CPM join put them with CPM = False
-    # (in front of the energy columns).
+    # CPM columns, in front of the energy columns.
     wide = to_wide(res, '_key', period).set_index('_key')
     fitted = key.isin(wide.index)
     n_drop = int((~fitted).sum())
@@ -333,8 +327,7 @@ def attach_cpm(df, pk, monthly, pair, third_party_dir, n_jobs=None,
     df = pd.concat([df.iloc[:, :at], add[cpm_cols], df.iloc[:, at:]], axis=1)
 
     # Components: the split of the fitted models. A source with no component
-    # (no fit, or no month with a temperature) is all baseload, as a series
-    # too short to fit.
+    # (no fit, or no month with a temperature) is treated as all baseload.
     comp = components_long(res, [pair])
     for y in (yb, ya):
         cy = comp[comp['year'] == str(y)]

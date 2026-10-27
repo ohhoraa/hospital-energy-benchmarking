@@ -1,60 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-S0. Data preparation (raw sources -> the intermediate CSVs read by S1).
-
-What this script does
----------------------
-1) Energy billing (master building / building) : long -> unit conversion ->
-   annual totals -> primary energy conversion -> wide
-2) Change-point model (CPM)                     : depends on `cpm` (below)
-3) Weather (monthly heating and cooling degree days) : annual totals ->
-   station-to-district matching
-4) HIRA medical institution information        : merge of the five sub-datasets
-   used in the study, plus derived variables
-
-CPM option (run_all_merge.CPM)
-  True   S0 keeps the monthly kWh series of the matched buildings; S1 fits the
-         change-point models with BE-sig. The *_CPM files are not read.
-  False  The *_CPM results are reshaped here; the components are
-         use_qty_eb/ec/eh of the billing source.
-
-Outputs (written to data_prepared, read by S1_SB_merge.py / S1_MB_merge.py)
-  after_master-energy_{year_b}_{year_a}.csv
-  after_building-energy_{year_b}_{year_a}.csv
-  after_master-cpm_{year_b}_{year_a}.csv      (cpm = False)
-  after_building-cpm_{year_b}_{year_a}.csv    (cpm = False)
-  after_master-monthly.csv                    (cpm = True)
-  after_building-monthly.csv                  (cpm = True)
-  after_weather.csv
-  after_hira_{hira}.csv
-
-Column naming
--------------
-Source column names are preserved throughout. The HIRA files are supplied with
-Korean column headings, so the whole heading set is mapped to the source
-English names in one place (the KOR2ENG_* dictionaries below).
-
-One necessary exception: the primary key of the master-building datasets is
-also called `mgm_bld_pk` in the source, which would collide with the building
-key on merging, so it is renamed to `mgm_upper_bld_pk`.
-
-Derived variables follow the released variable names:
-  bed_cnt      sum of the 13 bed types
-  dept_cnt     number of clinical departments
-  ct_cnt       equipment code B108 (CT)
-  mri_cnt      equipment code B301 (MRI)
-  diet_cnt     dietitians counted for the meal-service supplement
-  cook_cnt     cooks counted for the meal-service supplement
-  estb_dd      opening date (datetime conversion of the source string)
-  hos_ty_eng   institution type abbreviation (GH/H/CH/KH/DH/TH)
-
-Five HIRA sub-datasets are used:
-institutional information, facility information, medical equipment,
-meal-service staffing and medical departments. The remaining sub-datasets hold
-administrative or clinical information unrelated to building energy use, or
-have too many missing values.
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -74,7 +18,7 @@ if 'data_dir' not in globals():
 if 'hira' not in globals():
     hira = 202003
 
-# Sub-periods to process, injected by run_all_merge.py. Every year that appears
+# Subperiods to process, injected by run_all_merge.py. Every year that appears
 # in any pair is read individually first, then the pairs are joined; the CPM
 # fitting period of a pair is derived from it as x{year_b}01 - x{year_a}12.
 if 'year_pairs' not in globals():
@@ -117,11 +61,7 @@ def to_kwh(df, df_cd):
     for col in QTY_COLS:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-    # The source mixes text and numeric code values, so both code columns are
-    # coerced to the nullable integer type. Int64 rather than float is
-    # essential: the codes become column-name suffixes after the pivot below,
-    # and a float dtype would spell them '11.0' instead of '11', which no longer
-    # matches `need_cols` and would leave every energy column filled with zero.
+    # Int64: the codes become column-name suffixes ('11', not '11.0').
     _n_before = df['engy_kind_cd'].notna().sum()
     df['engy_kind_cd'] = (pd.to_numeric(df['engy_kind_cd'], errors='coerce')
                           .astype('Int64'))
@@ -150,8 +90,6 @@ def make_yearly_sum(df, pk_out):
     """Records in kWh (one year) -> annual totals (wide).
 
     pk_out : 'mgm_bld_pk' (building) or 'mgm_upper_bld_pk' (master building).
-             The master-building source uses the same key name as the building
-             source, so it has to be renamed here to keep later merges apart.
     """
     df = df.copy()
 
@@ -186,8 +124,6 @@ def make_yearly_sum(df, pk_out):
     yearly['use_qty_1st_0'] = sum(yearly[f'use_qty_1st_{e}'] for e in ENGY_KINDS)
 
     # Baseload / cooling / heating: site totals and primary conversion.
-    # (common.add_component_totals applies the same sums when S1 replaces the
-    # components with the CPM split.)
     for k in ('eb', 'ec', 'eh'):
         yearly[f'use_qty_{k}'] = sum(yearly[f'use_qty_{k}_{e}'] for e in ENGY_KINDS)
         yearly[f'use_qty_1st_{k}'] = sum(
@@ -291,8 +227,6 @@ def build_energy(src_token, out_token, pk_out, df_cd, keys=None):
     """Write the two-year pair files S1 reads, and with cpm = True the monthly
     series of `keys` as well.
 
-    Each year in YEARS is summed separately and held in memory; only the pair
-    files are written, because those are what S1 opens.
     """
     print(f'\n=== energy - {out_token} ===')
     ys, monthly = {}, []
@@ -308,7 +242,7 @@ def build_energy(src_token, out_token, pk_out, df_cd, keys=None):
             monthly.append(monthly_kwh(d, keys))
         print(f'  {out_token} {year} : {len(y):,} rows')
 
-    # Two-year pair: only buildings billed in both years (inner join).
+    # Subperiod: only buildings billed in both years (inner join).
     for year_b, year_a in year_pairs:
         pair = (pd.merge(ys[year_b], ys[year_a], on=pk_out, how='inner')
                   .sort_values(pk_out).reset_index(drop=True))
@@ -337,12 +271,6 @@ for _src, _out, _pk, _scope in ENERGY_SCOPES:
 # %% ==========================================================================
 # 2. Change-point model results (cpm = False)
 # =============================================================================
-# Source columns: mgm_bld_pk, engy_kind_cd, date_s, date_e, cpm_ty, md_rank,
-#   b0~b4, ns, rmse, nmbe, cvrmse, r2_adj, pval_*, ckd_out_idx, zre_out_idx,
-#   p_m1, p_m2, r2, r2_l, r2_r, x_min, x_max, sido_cd
-# Reshaped wide by energy source, the columns gain the source code as a suffix
-# (ns_11, r2_13 and so on). With cpm = True nothing is done here: S1 fits the
-# models itself and writes the same columns.
 COLS_CPM_VAL = ['mgm_bld_pk', 'engy_kind_cd', 'cpm_ty', 'b0', 'b1', 'b2', 'b3', 'b4',
                 'ns', 'cvrmse', 'rmse', 'nmbe', 'r2']
 COLS_CPM_INFO = ['mgm_bld_pk', 'sido_cd', 'date_s', 'date_e']
@@ -355,9 +283,6 @@ def processing_cpm(df, pk_out, date_s, date_e):
     df['date_e'] = df['date_e'].astype(str)
     df = df[(df['date_s'] == str(date_s)) & (df['date_e'] == str(date_e))].copy()
 
-    # Same reason as in to_kwh: engy_kind_cd becomes a column-name suffix
-    # below, and a float dtype would spell it '11.0', which S3's sub-period
-    # regex (^(base)_\d+$) does not match.
     df['engy_kind_cd'] = (pd.to_numeric(df['engy_kind_cd'], errors='coerce')
                           .astype('Int64'))
 
@@ -390,7 +315,7 @@ else:
     df_cpm_u = pd.read_csv(os.path.join(data_dir_in, '전국-의료시설-총괄표제부_CPM.csv'),
                            encoding='cp949', delimiter='|')
 
-    # The fitting period of a sub-period runs from January of the earlier year
+    # The fitting period of a subperiod runs from January of the earlier year
     # to December of the later one, which the source labels x{YYYYMM}.
     for year_b, year_a in year_pairs:
         ds, de = f'x{year_b}01', f'x{year_a}12'
@@ -413,7 +338,7 @@ df_w = pd.read_csv(
     os.path.join(data_dir_in, '데이터넷3_SQI_종관기상관측-월별냉난방도일.csv'),
     encoding='cp949')
 
-# Station matching at the finest administrative unit.
+# Station matching per beopjeong-dong.
 #   Station 169 was dropped for extensive missing hourly data and station 239
 #   began observing in 2019, so neither covers the whole study period.
 #   S1 attaches the station to each building through this table, and with
@@ -461,16 +386,13 @@ print(f'[weather] after_weather.csv saved ({len(weather):,} rows)')
 # %% ==========================================================================
 # 4. HIRA medical institution information
 # =============================================================================
-# The HIRA files are supplied with Korean column headings, so the headings are
-# mapped to the source English names in full.
-#
 # Mapping order
-#   1) ALIAS_KOR : normalise headings that differ slightly between releases
+#   1) ALIAS_KOR : normalize headings that differ slightly between releases
 #   2) KOR2ENG_* : Korean heading -> source English column name
 #   3) any heading left in Korean is reported, so a release change is visible
 # -----------------------------------------------------------------------------
 
-# 1) Normalise release-to-release heading variants.
+# 1) Normalize release-to-release heading variants.
 ALIAS_KOR = {
     '암호화YKIHO코드': '암호화요양기호',
     '의사총수': '총의사수',
@@ -615,7 +537,7 @@ MATCH_REN = {'place_code': 'ykiho', 'place_name': 'yadm_nm'}
 
 
 def rename_to_source(df, kor2eng, label):
-    """Normalise headings, map them to the source names, and report leftovers."""
+    """Normalize headings, map them to the source names, and report leftovers."""
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
@@ -629,9 +551,7 @@ def rename_to_source(df, kor2eng, label):
     df = df.rename(columns=ALIAS_KOR)
     df = df.rename(columns=kor2eng)
 
-    # Two different Korean headings mapping onto one English name would make
-    # df[col] return a DataFrame instead of a Series and break silently
-    # downstream, so stop here instead.
+    # Stop if two Korean headings map onto one English name.
     dup = df.columns[df.columns.duplicated()].unique().tolist()
     if dup:
         raise KeyError(
@@ -658,12 +578,8 @@ df_mat = mat[mat['base_yyyy'] == hira_base_yyyy].copy()
 df_mat = df_mat.rename(columns=MATCH_REN)
 
 # Columns kept from the matching table.
-#   Columns that also exist in the building register are deliberately excluded
-#   (plat_addr, road_plat_addr, sigungu_cd, bjdong_cd, bun, ji). Keeping them
-#   would produce _x/_y suffixes in the S1 merge and break the subsequent
-#   weather merge on ['sigungu_cd', 'bjdong_cd']. The building register is the
-#   authoritative source for the building location; the institution-side
-#   address is retained as input_addr / clean_addr.
+#   Columns also in the building registry are excluded; the registry is the
+#   source of the building location.
 _mat_keep = ['ykiho', 'base_yyyy', 'sido_cd', 'plat_gb_cd',
              'input_addr', 'clean_addr',
              'match_mgm_upper_bld_pks', 'match_mgm_bld_pks',
@@ -691,11 +607,8 @@ _BED_COL_EXPECTED = 13
 def add_bed_cnt_from_kor(df, label):
     """Build bed_cnt from the Korean headings, before renaming.
 
-    Bed column headings differ slightly between HIRA releases, so summing every
-    heading that ends in the Korean word for "number of beds" is robust to
-    those variants in a way that per-column mapping is not. The count is
-    checked against _BED_COL_EXPECTED so that a change in the source cannot
-    pass silently.
+    Sums every heading ending in the Korean word for "number of beds"; the
+    count is checked against _BED_COL_EXPECTED.
     """
     bed_kor = [c for c in df.columns if str(c).strip().endswith('병상수')]
     print(f'[{label}] {len(bed_kor)} bed columns detected: {bed_kor}')
@@ -756,9 +669,8 @@ def convert_estb_dd(df):
     estb = pd.Series(index=s.index, dtype='datetime64[ns]')
     is_valid = pd.Series(False, index=s.index)
 
-    # The 1-31 range check cannot reject a day that is invalid for its own month
-    # (20190230, 20190431), so the conversion is coerced and anything it returns
-    # as NaT joins the broken-date branch below instead of raising.
+    # Days invalid for their month (e.g. 20190230) become NaT and join the
+    # broken-date branch below.
     _conv = pd.to_datetime(s8[ok_mask], format='%Y%m%d',
                            errors='coerce').dropna()
     estb.loc[_conv.index] = _conv
@@ -798,11 +710,7 @@ if _bed_missing:
           f'headings).')
 assert 'bed_cnt' in df_fac1.columns, 'bed_cnt missing - check add_bed_cnt_from_kor'
 
-# Statutory minimum number of beds, Article 3-2 of the Medical Service Act.
-#   Dental hospitals and long-term care hospitals have no bed minimum.
-#   Psychiatric hospitals are licensed as such, so they are treated as meeting
-#   the requirement. Tertiary general hospitals are designated from among
-#   general hospitals on a periodic review (Article 3-4).
+# Statutory minimum number of beds (Medical Service Act).
 _n0 = len(df_fac1)
 df_fac1 = df_fac1[
     ((df_fac1['cl_cd_nm'] == '종합병원') & (df_fac1['bed_cnt'] >= 100)) |
@@ -816,7 +724,7 @@ print(f'[HIRA] statutory minimum-bed filter: {_n0:,} -> {len(df_fac1):,} rows')
 # 4-6. Derived: equipment (ct_cnt / mri_cnt), meal-service staffing
 #      (diet_cnt / cook_cnt), departments (dept_cnt)
 # -----------------------------------------------------------------------------
-# Equipment codes retained as broad model variables.
+# Equipment codes kept from the source.
 DICT_OFT = {
     'B105': 'mammography unit',
     'B108': 'CT',
@@ -873,11 +781,8 @@ df_fac = (df_fac1
           .merge(df_fac0.drop(columns=_dup), on='ykiho', how='left')
           .fillna({'match_mgm_bld_pks': 'nan', 'match_mgm_upper_bld_pks': 'nan'}))
 
-# An institution absent from the equipment or meal-service table owns none of
-# that equipment and claims no meal-service surcharge, so its counts are 0
-# rather than missing. The fill is restricted to the columns each merge brings
-# in: a frame-wide fillna(0) would also turn a missing opening date into the
-# integer 0 and a missing institution name into 0.
+# Absent from the equipment or meal-service table = none, so 0. Only the
+# columns each merge brings in are filled.
 for _side in (df_oft, df_meal):
     _new = [c for c in _side.columns if c != 'ykiho']
     df_fac = df_fac.merge(_side, on='ykiho', how='left')
@@ -902,7 +807,7 @@ _num_cols = (['bed_cnt', 'tot_dr_cnt', 'dept_cnt', 'ct_cnt', 'mri_cnt',
 for c in [c for c in _num_cols if c in df_fac.columns]:
     df_fac[c] = pd.to_numeric(df_fac[c], errors='coerce')
 
-# Restore the NaN values that became the literal string during conversion.
+# Turn the 'nan' placeholders back into NaN.
 df_fac.replace('nan', np.nan, inplace=True)
 
 

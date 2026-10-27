@@ -1,0 +1,6 @@
+﻿ykiho,list_ty,reason_code,note,hos_ty_eng,gfa,bed_cnt,site_sum_2018,site_sum_2019,site_sum_2020,site_sum_2021
+,mat_err,MATCH_ERR,Building mismatch; the two study years differ by more than a factor of two in annual energy use.,H,3047.15,61,1285144.37,1163425.99,325586.78,650710.43
+,mat_err,OPERATION_CHANGE,Operation appears to have ceased during the study period due to neighbourhood redevelopment.,KH,1560.62,80,417259.43,404718.77,438624.80,140611.26
+,mat_err,OPERATION_CHANGE,The occupying institution changed after a major renovation during the study period.,H,3447.73,55,1515726.60,1560764.77,1487863.43,592656.64
+,dist_err,DIST_OUTLIER,"(A1) Large floor area with high energy use per bed, indicating substantial non-inpatient functions.",GH,145476.8,614,54328823.26,52873651.87,53558349.14,59000711.46
+,dist_err,DIST_OUTLIER,"(A2) Large floor area with high energy use per bed, indicating substantial non-inpatient functions.",TH,188769.83,671,39089440.57,38683983.45,45249750.24,59763052.73
