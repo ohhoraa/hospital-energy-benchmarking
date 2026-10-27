@@ -95,7 +95,7 @@ if 'data_dir' not in globals():
 if 'figure_dir' not in globals():
     figure_dir = os.path.join(_BASE_DIR, 'figures')
 if 'exclusion_csv' not in globals():
-    exclusion_csv = os.path.join(_BASE_DIR, 'manual_exclusions.csv')
+    exclusion_csv = os.path.join(_BASE_DIR, 'data_raw', 'manual_exclusions.csv')
 if 'date' not in globals():
     date = 260826            # the prefix the files in data_prepared carry
 if 'hira' not in globals():

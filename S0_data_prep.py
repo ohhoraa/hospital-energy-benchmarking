@@ -6,17 +6,25 @@ What this script does
 ---------------------
 1) Energy billing (master building / building) : long -> unit conversion ->
    annual totals -> primary energy conversion -> wide
-2) Change-point model (CPM) results            : period filter -> wide by source
+2) Change-point model (CPM)                     : depends on `cpm` (below)
 3) Weather (monthly heating and cooling degree days) : annual totals ->
    station-to-district matching
 4) HIRA medical institution information        : merge of the five sub-datasets
    used in the study, plus derived variables
 
+CPM option (run_all_merge.CPM)
+  True   S0 keeps the monthly kWh series of the matched buildings; S1 fits the
+         change-point models with BE-sig. The *_CPM files are not read.
+  False  The *_CPM results are reshaped here; the components are
+         use_qty_eb/ec/eh of the billing source.
+
 Outputs (written to data_prepared, read by S1_SB_merge.py / S1_MB_merge.py)
   after_master-energy_{year_b}_{year_a}.csv
   after_building-energy_{year_b}_{year_a}.csv
-  after_master-cpm_{year_b}_{year_a}.csv
-  after_building-cpm_{year_b}_{year_a}.csv
+  after_master-cpm_{year_b}_{year_a}.csv      (cpm = False)
+  after_building-cpm_{year_b}_{year_a}.csv    (cpm = False)
+  after_master-monthly.csv                    (cpm = True)
+  after_building-monthly.csv                  (cpm = True)
   after_weather.csv
   after_hira_{hira}.csv
 
@@ -51,7 +59,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from common import HOS_TY_LABEL_MAP, PRI_FACTOR
+from common import HOS_TY_LABEL_MAP, PRI_FACTOR, SCOPE_CFG
 
 
 # =============================================================================
@@ -73,6 +81,10 @@ if 'year_pairs' not in globals():
     year_pairs = [(2018, 2019), (2020, 2021)]
 YEARS = sorted({y for _pair in year_pairs for y in _pair})
 
+# CPM option (see the header).
+if 'cpm' not in globals():
+    cpm = True
+
 # HIRA release year used by the address matching table (hira=202003 -> 2020).
 hira_base_yyyy = int(str(hira)[:4])
 
@@ -82,28 +94,27 @@ os.makedirs(data_dir, exist_ok=True)
 # %% ==========================================================================
 # 1. Energy billing (master building / building)
 # =============================================================================
-def make_yearly_sum(df, df_cd, pk_out):
-    """Monthly billing (long) -> annual totals (wide).
+QTY_COLS = ['use_qty_tot', 'use_qty_eb', 'use_qty_ec', 'use_qty_eh']
+ENGY_KINDS = (11, 12, 13)    # electricity / gas / district heating
+
+
+def to_kwh(df, df_cd):
+    """Raw billing records -> the same records with every quantity in kWh.
 
     Parameters
     ----------
     df   : raw billing records. Columns include mgm_bld_pk, engy_kind_cd,
            use_ym, unit_cd, use_qty_tot / use_qty_eb / use_qty_ec / use_qty_eh
            (engy_kind_cd: 11 electricity / 12 gas / 13 district heating).
-           The baseload (eb), cooling (ec) and heating (eh) components are the
-           change-point model disaggregation of the calendarized records.
+           use_qty_tot is the calendarized monthly consumption; eb, ec and eh
+           are its baseload, cooling and heating components as supplied.
+           With cpm = True, S1 replaces them with the split of the fitted
+           models.
     df_cd: 'energy unit' sheet of the code table (engy_kind_cd, unit_cd, to_kwh)
-    pk_out : 'mgm_bld_pk' (building) or 'mgm_upper_bld_pk' (master building).
-             The master-building source uses the same key name as the building
-             source, so it has to be renamed here to keep later merges apart.
     """
     df = df.copy()
 
-    # Year from use_ym (YYYYMM).
-    df['use_ym'] = df['use_ym'].astype(str).str[:4]
-
-    qty_cols = ['use_qty_tot', 'use_qty_eb', 'use_qty_ec', 'use_qty_eh']
-    for col in qty_cols:
+    for col in QTY_COLS:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     # The source mixes text and numeric code values, so both code columns are
@@ -130,41 +141,57 @@ def make_yearly_sum(df, df_cd, pk_out):
     print(f'  to_kwh missing rows: {df["to_kwh"].isna().sum()}')
     df['to_kwh'] = df['to_kwh'].fillna(1)   # no factor -> keep the raw value
 
-    for col in qty_cols:
+    for col in QTY_COLS:
         df[col] = df[col] * df['to_kwh']
+    return df
+
+
+def make_yearly_sum(df, pk_out):
+    """Records in kWh (one year) -> annual totals (wide).
+
+    pk_out : 'mgm_bld_pk' (building) or 'mgm_upper_bld_pk' (master building).
+             The master-building source uses the same key name as the building
+             source, so it has to be renamed here to keep later merges apart.
+    """
+    df = df.copy()
+
+    # Year from use_ym (YYYYMM).
+    df['use_ym'] = df['use_ym'].astype(str).str[:4]
 
     # Annual totals, then wide by energy source.
     yearly = (
         df.groupby(['mgm_bld_pk', 'engy_kind_cd', 'use_ym'],
-                   as_index=False)[qty_cols].sum()
+                   as_index=False)[QTY_COLS].sum()
     )
     yearly = yearly.pivot_table(
-        index='mgm_bld_pk', columns=['engy_kind_cd'], values=qty_cols
+        index='mgm_bld_pk', columns=['engy_kind_cd'], values=QTY_COLS
     ).reset_index()
     yearly.columns = ['_'.join(map(str, c)) if isinstance(c, tuple) else c
                       for c in yearly.columns]
 
     # Fill sources a building does not use with zero so the column set is fixed.
     need_cols = [f'use_qty_{k}_{e}' for k in ('tot', 'eb', 'ec', 'eh')
-                 for e in (11, 12, 13)]
+                 for e in ENGY_KINDS]
     for c in need_cols:
         if c not in yearly.columns:
             yearly[c] = 0
     yearly[need_cols] = yearly[need_cols].fillna(0)
 
     # Site energy total.
-    yearly['use_qty_0'] = sum(yearly[f'use_qty_tot_{e}'] for e in (11, 12, 13))
+    yearly['use_qty_0'] = sum(yearly[f'use_qty_tot_{e}'] for e in ENGY_KINDS)
 
     # Primary energy conversion: electricity 2.75 / gas 1.1 / district heat 0.728.
-    for e in (11, 12, 13):
+    for e in ENGY_KINDS:
         yearly[f'use_qty_1st_{e}'] = yearly[f'use_qty_tot_{e}'] * PRI_FACTOR[e]
-    yearly['use_qty_1st_0'] = sum(yearly[f'use_qty_1st_{e}'] for e in (11, 12, 13))
+    yearly['use_qty_1st_0'] = sum(yearly[f'use_qty_1st_{e}'] for e in ENGY_KINDS)
 
     # Baseload / cooling / heating: site totals and primary conversion.
+    # (common.add_component_totals applies the same sums when S1 replaces the
+    # components with the CPM split.)
     for k in ('eb', 'ec', 'eh'):
-        yearly[f'use_qty_{k}'] = sum(yearly[f'use_qty_{k}_{e}'] for e in (11, 12, 13))
+        yearly[f'use_qty_{k}'] = sum(yearly[f'use_qty_{k}_{e}'] for e in ENGY_KINDS)
         yearly[f'use_qty_1st_{k}'] = sum(
-            yearly[f'use_qty_{k}_{e}'] * PRI_FACTOR[e] for e in (11, 12, 13))
+            yearly[f'use_qty_{k}_{e}'] * PRI_FACTOR[e] for e in ENGY_KINDS)
 
     cols = {
         'mgm_bld_pk_': pk_out,
@@ -207,33 +234,78 @@ def make_yearly_sum(df, df_cd, pk_out):
     return yearly
 
 
+def monthly_kwh(df, keys):
+    """Records in kWh -> the monthly series of the given keys (cpm = True).
+
+    Columns: key, engy_kind_cd ('11'/'12'/'13'), use_ym ('YYYYMM'), kwh.
+    Only months with a record appear; nothing is filled.
+    """
+    d = df.loc[df['engy_kind_cd'].notna(),
+               ['mgm_bld_pk', 'engy_kind_cd', 'use_ym', 'use_qty_tot']].copy()
+    d['key'] = d['mgm_bld_pk'].astype(str).str.strip()
+    d = d[d['key'].isin(keys)]
+    return pd.DataFrame({
+        'key': d['key'],
+        'engy_kind_cd': d['engy_kind_cd'].astype(int).astype(str),
+        'use_ym': d['use_ym'].astype(str).str[:6],
+        'kwh': d['use_qty_tot'],
+    })
+
+
 def add_year_suffix(df, year, pk_col):
     """Append _{year} to every column except the primary key."""
     return df.rename(columns={c: f'{c}_{year}' for c in df.columns if c != pk_col})
 
 
-# Source scope -> (file-name token in the source data, output token, key)
+# Source scope -> (file-name token in the source data, output token, key,
+# pipeline scope)
 ENERGY_SCOPES = [
-    ('총괄표제부', 'master', 'mgm_upper_bld_pk'),
-    ('표제부', 'building', 'mgm_bld_pk'),
+    ('총괄표제부', 'master', 'mgm_upper_bld_pk', 'MB'),
+    ('표제부', 'building', 'mgm_bld_pk', 'SB'),
 ]
 
+# Matching-table column that lists the building key(s) of each pipeline scope.
+#   SB (CASE102): the building record; MB (CASE101): the master record.
+TARGET_COL = {'SB': 'match_mgm_bld_pks', 'MB': 'match_mgm_upper_bld_pks'}
 
-def build_energy(src_token, out_token, pk_out, df_cd):
-    """Write the two-year pair files S1 reads.
+
+def matched_keys():
+    """{scope: set of building keys} the matching table links to a medical
+    institution, at the match level the scope uses in S1 (cpm = True).
+
+    Only these buildings can reach S1, so the monthly records kept for the
+    fits are limited to them.
+    """
+    mat = pd.read_csv(os.path.join(data_dir_in, '전국-의료기관건축물대장매칭.csv'),
+                      delimiter='|', encoding='utf-8', dtype=str)
+    mat = mat[pd.to_numeric(mat['base_yyyy'], errors='coerce') == hira_base_yyyy]
+    out = {}
+    for scope, col in TARGET_COL.items():
+        s = mat.loc[mat['match_level'] == SCOPE_CFG[scope]['match_level'], col]
+        keys = s.dropna().str.split(',').explode().str.strip()
+        out[scope] = set(keys[(keys != '') & (keys.str.lower() != 'nan')])
+    return out
+
+
+def build_energy(src_token, out_token, pk_out, df_cd, keys=None):
+    """Write the two-year pair files S1 reads, and with cpm = True the monthly
+    series of `keys` as well.
 
     Each year in YEARS is summed separately and held in memory; only the pair
     files are written, because those are what S1 opens.
     """
     print(f'\n=== energy - {out_token} ===')
-    ys = {}
+    ys, monthly = {}, []
     for year in YEARS:
         raw = pd.read_csv(
             os.path.join(data_dir_in, f'전국-의료시설-{year}-{src_token}-사용량.csv'),
             encoding='cp949', delimiter='|',
         )
-        y = make_yearly_sum(raw, df_cd, pk_out=pk_out)
+        d = to_kwh(raw, df_cd)
+        y = make_yearly_sum(d, pk_out=pk_out)
         ys[year] = add_year_suffix(y, year, pk_col=pk_out)
+        if keys is not None:
+            monthly.append(monthly_kwh(d, keys))
         print(f'  {out_token} {year} : {len(y):,} rows')
 
     # Two-year pair: only buildings billed in both years (inner join).
@@ -246,33 +318,33 @@ def build_energy(src_token, out_token, pk_out, df_cd):
             index=False, encoding='utf-8-sig')
         print(f'  {out_token} {year_b}_{year_a} : {len(pair):,} rows')
 
+    if keys is not None:
+        m = pd.concat(monthly, ignore_index=True)
+        m.to_csv(os.path.join(data_dir, f'after_{out_token}-monthly.csv'),
+                 index=False, encoding='utf-8-sig')
+        print(f'  {out_token} monthly series for the CPM: '
+              f'{m["key"].nunique():,} key(s), {len(m):,} rows')
+
 
 df_cd = pd.read_excel(os.path.join(data_dir_in, '공통코드.xlsx'),
                       sheet_name='에너지 단위')
 
-for _src, _out, _pk in ENERGY_SCOPES:
-    build_energy(_src, _out, pk_out=_pk, df_cd=df_cd)
+_keys = matched_keys() if cpm else {}
+for _src, _out, _pk, _scope in ENERGY_SCOPES:
+    build_energy(_src, _out, pk_out=_pk, df_cd=df_cd, keys=_keys.get(_scope))
 
 
 # %% ==========================================================================
-# 2. Change-point model results
+# 2. Change-point model results (cpm = False)
 # =============================================================================
 # Source columns: mgm_bld_pk, engy_kind_cd, date_s, date_e, cpm_ty, md_rank,
 #   b0~b4, ns, rmse, nmbe, cvrmse, r2_adj, pval_*, ckd_out_idx, zre_out_idx,
 #   p_m1, p_m2, r2, r2_l, r2_r, x_min, x_max, sido_cd
 # Reshaped wide by energy source, the columns gain the source code as a suffix
-# (ns_11, r2_13 and so on).
-#
-# The change-point modelling tool itself is third-party software and is not
-# part of this repository. This
-# script consumes its output.
-df_cpm_b = pd.read_csv(os.path.join(data_dir_in, '전국-의료시설-표제부-KICT_CPM.csv'),
-                       encoding='cp949', delimiter='|')
-df_cpm_u = pd.read_csv(os.path.join(data_dir_in, '전국-의료시설-총괄표제부-KICT_CPM.csv'),
-                       encoding='cp949', delimiter='|')
-
+# (ns_11, r2_13 and so on). With cpm = True nothing is done here: S1 fits the
+# models itself and writes the same columns.
 COLS_CPM_VAL = ['mgm_bld_pk', 'engy_kind_cd', 'cpm_ty', 'b0', 'b1', 'b2', 'b3', 'b4',
-                'ns', 'cvrmse', 'rmse', 'nmbe', 'r2', 'r2_l', 'r2_r']
+                'ns', 'cvrmse', 'rmse', 'nmbe', 'r2']
 COLS_CPM_INFO = ['mgm_bld_pk', 'sido_cd', 'date_s', 'date_e']
 
 
@@ -283,9 +355,9 @@ def processing_cpm(df, pk_out, date_s, date_e):
     df['date_e'] = df['date_e'].astype(str)
     df = df[(df['date_s'] == str(date_s)) & (df['date_e'] == str(date_e))].copy()
 
-    # Same reason as in make_yearly_sum: engy_kind_cd becomes a column-name
-    # suffix below, and a float dtype would spell it '11.0', which S3's
-    # sub-period regex (^(base)_\d+$) does not match.
+    # Same reason as in to_kwh: engy_kind_cd becomes a column-name suffix
+    # below, and a float dtype would spell it '11.0', which S3's sub-period
+    # regex (^(base)_\d+$) does not match.
     df['engy_kind_cd'] = (pd.to_numeric(df['engy_kind_cd'], errors='coerce')
                           .astype('Int64'))
 
@@ -309,17 +381,26 @@ def processing_cpm(df, pk_out, date_s, date_e):
     return pd.merge(df_info, df_pivot, on=pk_out, how='inner')
 
 
-# The fitting period of a sub-period runs from January of the earlier year to
-# December of the later one, which the source labels x{YYYYMM}.
-for year_b, year_a in year_pairs:
-    ds, de = f'x{year_b}01', f'x{year_a}12'
-    processing_cpm(df_cpm_u, 'mgm_upper_bld_pk', ds, de).to_csv(
-        os.path.join(data_dir, f'after_master-cpm_{year_b}_{year_a}.csv'),
-        index=False, encoding='utf-8-sig')
-    processing_cpm(df_cpm_b, 'mgm_bld_pk', ds, de).to_csv(
-        os.path.join(data_dir, f'after_building-cpm_{year_b}_{year_a}.csv'),
-        index=False, encoding='utf-8-sig')
-    print(f'[CPM] {year_b}_{year_a} saved')
+if cpm:
+    print('\n[CPM] CPM = True: the *_CPM files are not read; S1 fits the '
+          'models with BE-sig after the merge.')
+else:
+    df_cpm_b = pd.read_csv(os.path.join(data_dir_in, '전국-의료시설-표제부_CPM.csv'),
+                           encoding='cp949', delimiter='|')
+    df_cpm_u = pd.read_csv(os.path.join(data_dir_in, '전국-의료시설-총괄표제부_CPM.csv'),
+                           encoding='cp949', delimiter='|')
+
+    # The fitting period of a sub-period runs from January of the earlier year
+    # to December of the later one, which the source labels x{YYYYMM}.
+    for year_b, year_a in year_pairs:
+        ds, de = f'x{year_b}01', f'x{year_a}12'
+        processing_cpm(df_cpm_u, 'mgm_upper_bld_pk', ds, de).to_csv(
+            os.path.join(data_dir, f'after_master-cpm_{year_b}_{year_a}.csv'),
+            index=False, encoding='utf-8-sig')
+        processing_cpm(df_cpm_b, 'mgm_bld_pk', ds, de).to_csv(
+            os.path.join(data_dir, f'after_building-cpm_{year_b}_{year_a}.csv'),
+            index=False, encoding='utf-8-sig')
+        print(f'[CPM] {year_b}_{year_a} saved')
 
 
 # %% ==========================================================================
@@ -335,6 +416,8 @@ df_w = pd.read_csv(
 # Station matching at the finest administrative unit.
 #   Station 169 was dropped for extensive missing hourly data and station 239
 #   began observing in 2019, so neither covers the whole study period.
+#   S1 attaches the station to each building through this table, and with
+#   cpm = True the CPM fit uses the same station for its temperatures.
 df_sta = (df_sta[df_sta['region_level_type'] == 'bjdong']
           .copy()
           .filter(items=['region_cd', 'kma_obsrvn_cd_not_169_239']))

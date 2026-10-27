@@ -1,0 +1,918 @@
+{
+  "title": "Nationwide building energy benchmarking dataset for medical institutions in South Korea",
+  "description": "Column definitions of hospital_energy_benchmarking_{N}.csv",
+  "fields": [
+    {
+      "name": "model_ty",
+      "type": "string",
+      "description": "Building-institution configuration",
+      "category": "Building characteristics",
+      "unit": "–"
+    },
+    {
+      "name": "plat_area",
+      "type": "number",
+      "description": "Lot area",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "footprint_area",
+      "type": "number",
+      "description": "Building footprint area",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "bc_rat",
+      "type": "number",
+      "description": "Building coverage ratio",
+      "category": "Building characteristics",
+      "unit": "%"
+    },
+    {
+      "name": "fa_rat",
+      "type": "number",
+      "description": "Floor area ratio",
+      "category": "Building characteristics",
+      "unit": "%"
+    },
+    {
+      "name": "gfa",
+      "type": "number",
+      "description": "Gross floor area",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "gfa_r",
+      "type": "number",
+      "description": "Gross floor area used to calculate fa_rat",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "grnd_flr_max",
+      "type": "integer",
+      "description": "Maximum No. of above-ground floors",
+      "category": "Building characteristics",
+      "unit": "count"
+    },
+    {
+      "name": "ugrnd_flr_max",
+      "type": "integer",
+      "description": "Maximum No. of below-ground floors",
+      "category": "Building characteristics",
+      "unit": "count"
+    },
+    {
+      "name": "pu_rat",
+      "type": "number",
+      "description": "Share of medical-use floor area in the total floor area excluding parking",
+      "category": "Building characteristics",
+      "unit": "%"
+    },
+    {
+      "name": "flr_hos_area",
+      "type": "number",
+      "description": "Floor area dedicated to medical use, summed from the floor summary records",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "flr_net_area",
+      "type": "number",
+      "description": "Total floor area excluding parking, summed from the floor summary records",
+      "category": "Building characteristics",
+      "unit": "m²"
+    },
+    {
+      "name": "hos_ty_eng",
+      "type": "string",
+      "description": "Institution type based on the HIRADB classification (see Usage Notes)",
+      "category": "Operational characteristics",
+      "unit": "–"
+    },
+    {
+      "name": "open_ymd",
+      "type": "date",
+      "description": "Date on which the institution commenced operation",
+      "category": "Operational characteristics",
+      "unit": "–"
+    },
+    {
+      "name": "dept_cnt",
+      "type": "integer",
+      "description": "No. of clinical departments",
+      "category": "Operational characteristics",
+      "unit": "count"
+    },
+    {
+      "name": "bed_cnt",
+      "type": "integer",
+      "description": "Total no. of licensed beds, summed across all bed types reported in the HIRADB",
+      "category": "Operational characteristics",
+      "unit": "beds"
+    },
+    {
+      "name": "doctor_cnt",
+      "type": "integer",
+      "description": "No. of doctors",
+      "category": "Operational characteristics",
+      "unit": "persons"
+    },
+    {
+      "name": "ct_cnt",
+      "type": "integer",
+      "description": "No. of CT (computed tomography) scanners",
+      "category": "Operational characteristics",
+      "unit": "count"
+    },
+    {
+      "name": "mri_cnt",
+      "type": "integer",
+      "description": "No. of MRI (magnetic resonance imaging) scanners",
+      "category": "Operational characteristics",
+      "unit": "count"
+    },
+    {
+      "name": "diet_cnt",
+      "type": "integer",
+      "description": "No. of dietitians",
+      "category": "Operational characteristics",
+      "unit": "persons"
+    },
+    {
+      "name": "cook_cnt",
+      "type": "integer",
+      "description": "No. of cooks",
+      "category": "Operational characteristics",
+      "unit": "persons"
+    },
+    {
+      "name": "site_sum_2018",
+      "type": "number",
+      "description": "Total site energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "site_elec + site_gas + site_heat",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "site_sum_2019",
+      "type": "number",
+      "description": "Total site energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "site_elec + site_gas + site_heat",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "site_sum_2020",
+      "type": "number",
+      "description": "Total site energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "site_elec + site_gas + site_heat",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "site_sum_2021",
+      "type": "number",
+      "description": "Total site energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "site_elec + site_gas + site_heat",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "site_elec_2018",
+      "type": "number",
+      "description": "Site electricity energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_e,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "site_elec_2019",
+      "type": "number",
+      "description": "Site electricity energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_e,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "site_elec_2020",
+      "type": "number",
+      "description": "Site electricity energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_e,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "site_elec_2021",
+      "type": "number",
+      "description": "Site electricity energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_e,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "site_gas_2018",
+      "type": "number",
+      "description": "Site gas energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_g,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "site_gas_2019",
+      "type": "number",
+      "description": "Site gas energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_g,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "site_gas_2020",
+      "type": "number",
+      "description": "Site gas energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_g,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "site_gas_2021",
+      "type": "number",
+      "description": "Site gas energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_g,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "site_heat_2018",
+      "type": "number",
+      "description": "Site district heating energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "site_heat_2019",
+      "type": "number",
+      "description": "Site district heating energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "site_heat_2020",
+      "type": "number",
+      "description": "Site district heating energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "site_heat_2021",
+      "type": "number",
+      "description": "Site district heating energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Source total",
+      "status": "Measured",
+      "equation": "Σ_m E_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "site_clg_2018",
+      "type": "number",
+      "description": "Total site cooling energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m C_e,m + Σ_m C_g,m + Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_clg_2019",
+      "type": "number",
+      "description": "Total site cooling energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m C_e,m + Σ_m C_g,m + Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_clg_2020",
+      "type": "number",
+      "description": "Total site cooling energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m C_e,m + Σ_m C_g,m + Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_clg_2021",
+      "type": "number",
+      "description": "Total site cooling energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m C_e,m + Σ_m C_g,m + Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_htg_2018",
+      "type": "number",
+      "description": "Total site heating energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m H_e,m + Σ_m H_g,m + Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_htg_2019",
+      "type": "number",
+      "description": "Total site heating energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m H_e,m + Σ_m H_g,m + Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_htg_2020",
+      "type": "number",
+      "description": "Total site heating energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m H_e,m + Σ_m H_g,m + Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_htg_2021",
+      "type": "number",
+      "description": "Total site heating energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m H_e,m + Σ_m H_g,m + Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_base_2018",
+      "type": "number",
+      "description": "Total site baseload energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m B_e,m + Σ_m B_g,m + Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_base_2019",
+      "type": "number",
+      "description": "Total site baseload energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m B_e,m + Σ_m B_g,m + Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_base_2020",
+      "type": "number",
+      "description": "Total site baseload energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m B_e,m + Σ_m B_g,m + Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "site_base_2021",
+      "type": "number",
+      "description": "Total site baseload energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "End-use estimate",
+      "status": "Modeled (CPM)",
+      "equation": "Σ_m B_e,m + Σ_m B_g,m + Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Split of the change-point model prediction for each energy source, summed over sources; site_base + site_htg + site_clg does not exactly equal site_sum"
+    },
+    {
+      "name": "pri_sum_2018",
+      "type": "number",
+      "description": "Total primary energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "pri_elec + pri_gas + pri_heat",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "pri_sum_2019",
+      "type": "number",
+      "description": "Total primary energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "pri_elec + pri_gas + pri_heat",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "pri_sum_2020",
+      "type": "number",
+      "description": "Total primary energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "pri_elec + pri_gas + pri_heat",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "pri_sum_2021",
+      "type": "number",
+      "description": "Total primary energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "pri_elec + pri_gas + pri_heat",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "pri_elec_2018",
+      "type": "number",
+      "description": "Primary electricity energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "2.75 × site_elec",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "pri_elec_2019",
+      "type": "number",
+      "description": "Primary electricity energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "2.75 × site_elec",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "pri_elec_2020",
+      "type": "number",
+      "description": "Primary electricity energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "2.75 × site_elec",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "pri_elec_2021",
+      "type": "number",
+      "description": "Primary electricity energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "2.75 × site_elec",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "pri_gas_2018",
+      "type": "number",
+      "description": "Primary gas energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "1.1 × site_gas",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "pri_gas_2019",
+      "type": "number",
+      "description": "Primary gas energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "1.1 × site_gas",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "pri_gas_2020",
+      "type": "number",
+      "description": "Primary gas energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "1.1 × site_gas",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "pri_gas_2021",
+      "type": "number",
+      "description": "Primary gas energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "1.1 × site_gas",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "pri_heat_2018",
+      "type": "number",
+      "description": "Primary district heating energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "0.728 × site_heat",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "pri_heat_2019",
+      "type": "number",
+      "description": "Primary district heating energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "0.728 × site_heat",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "pri_heat_2020",
+      "type": "number",
+      "description": "Primary district heating energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "0.728 × site_heat",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "pri_heat_2021",
+      "type": "number",
+      "description": "Primary district heating energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Measured × factor",
+      "equation": "0.728 × site_heat",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "pri_clg_2018",
+      "type": "number",
+      "description": "Total primary cooling energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m C_e,m + 1.1 × Σ_m C_g,m + 0.728 × Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_clg_2019",
+      "type": "number",
+      "description": "Total primary cooling energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m C_e,m + 1.1 × Σ_m C_g,m + 0.728 × Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_clg_2020",
+      "type": "number",
+      "description": "Total primary cooling energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m C_e,m + 1.1 × Σ_m C_g,m + 0.728 × Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_clg_2021",
+      "type": "number",
+      "description": "Total primary cooling energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m C_e,m + 1.1 × Σ_m C_g,m + 0.728 × Σ_m C_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_htg_2018",
+      "type": "number",
+      "description": "Total primary heating energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m H_e,m + 1.1 × Σ_m H_g,m + 0.728 × Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_htg_2019",
+      "type": "number",
+      "description": "Total primary heating energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m H_e,m + 1.1 × Σ_m H_g,m + 0.728 × Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_htg_2020",
+      "type": "number",
+      "description": "Total primary heating energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m H_e,m + 1.1 × Σ_m H_g,m + 0.728 × Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_htg_2021",
+      "type": "number",
+      "description": "Total primary heating energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m H_e,m + 1.1 × Σ_m H_g,m + 0.728 × Σ_m H_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_base_2018",
+      "type": "number",
+      "description": "Total primary baseload energy consumption, 2018",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m B_e,m + 1.1 × Σ_m B_g,m + 0.728 × Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_base_2019",
+      "type": "number",
+      "description": "Total primary baseload energy consumption, 2019",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m B_e,m + 1.1 × Σ_m B_g,m + 0.728 × Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_base_2020",
+      "type": "number",
+      "description": "Total primary baseload energy consumption, 2020",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m B_e,m + 1.1 × Σ_m B_g,m + 0.728 × Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "pri_base_2021",
+      "type": "number",
+      "description": "Total primary baseload energy consumption, 2021",
+      "category": "Energy consumption",
+      "unit": "kWh/yr",
+      "dimension": "Primary-energy conversion",
+      "status": "Modeled × factor",
+      "equation": "2.75 × Σ_m B_e,m + 1.1 × Σ_m B_g,m + 0.728 × Σ_m B_h,m",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)",
+      "note": "Site component of each energy source multiplied by the primary energy factor of that source (electricity 2.75, gas 1.1, district heating 0.728) and summed; derived from the change-point model split, so pri_base + pri_htg + pri_clg does not exactly equal pri_sum"
+    },
+    {
+      "name": "hdd_2018",
+      "type": "number",
+      "description": "Annual heating degree days (base temperature 18 ℃), 2018",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m HDD_m (base temperature 18 ℃)",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "hdd_2019",
+      "type": "number",
+      "description": "Annual heating degree days (base temperature 18 ℃), 2019",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m HDD_m (base temperature 18 ℃)",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "hdd_2020",
+      "type": "number",
+      "description": "Annual heating degree days (base temperature 18 ℃), 2020",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m HDD_m (base temperature 18 ℃)",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "hdd_2021",
+      "type": "number",
+      "description": "Annual heating degree days (base temperature 18 ℃), 2021",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m HDD_m (base temperature 18 ℃)",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    },
+    {
+      "name": "cdd_2018",
+      "type": "number",
+      "description": "Annual cooling degree days (base temperature 24 ℃), 2018",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m CDD_m (base temperature 24 ℃)",
+      "aggregation_period": "Calendar year 2018 (Jan-Dec)"
+    },
+    {
+      "name": "cdd_2019",
+      "type": "number",
+      "description": "Annual cooling degree days (base temperature 24 ℃), 2019",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m CDD_m (base temperature 24 ℃)",
+      "aggregation_period": "Calendar year 2019 (Jan-Dec)"
+    },
+    {
+      "name": "cdd_2020",
+      "type": "number",
+      "description": "Annual cooling degree days (base temperature 24 ℃), 2020",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m CDD_m (base temperature 24 ℃)",
+      "aggregation_period": "Calendar year 2020 (Jan-Dec)"
+    },
+    {
+      "name": "cdd_2021",
+      "type": "number",
+      "description": "Annual cooling degree days (base temperature 24 ℃), 2021",
+      "category": "Weather",
+      "unit": "℃·day",
+      "dimension": "Weather",
+      "status": "Observed",
+      "equation": "Σ_m CDD_m (base temperature 24 ℃)",
+      "aggregation_period": "Calendar year 2021 (Jan-Dec)"
+    }
+  ],
+  "missingValues": [
+    ""
+  ],
+  "symbols": [
+    {
+      "symbol": "e, g, h",
+      "meaning": "Subscripts for electricity, gas and district heating"
+    },
+    {
+      "symbol": "m",
+      "meaning": "Calendar month (m = 1, ..., 12)"
+    },
+    {
+      "symbol": "Σ_m",
+      "meaning": "Sum over the 12 months of the year"
+    },
+    {
+      "symbol": "E_e,m, E_g,m, E_h,m",
+      "meaning": "Calendarized monthly consumption of electricity, gas and district heating, in kWh"
+    },
+    {
+      "symbol": "B, H, C",
+      "meaning": "Monthly baseload, heating and cooling components of each source (subscripts as for E), split from the change-point model (CPM) fitted to that source over the two-year subperiod containing the year (2018-2019 or 2020-2021)"
+    },
+    {
+      "symbol": "HDD_m, CDD_m",
+      "meaning": "Monthly heating and cooling degree days of the ASOS station assigned to the beopjeong-dong of the institution (DataNet degree-day table)"
+    },
+    {
+      "symbol": "2.75, 1.1, 0.728",
+      "meaning": "National primary energy conversion factors for electricity, gas and district heating"
+    }
+  ],
+  "notes": [
+    "All energy and weather variables are calendar-year totals (January-December), provided for 2018-2021 with the year as a suffix (e.g., site_sum_2018).",
+    "site_base + site_htg + site_clg equals the CPM prediction, not exactly site_sum; likewise, pri_base + pri_htg + pri_clg does not exactly equal pri_sum."
+  ]
+}

@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pipeline:
+    name: sample run (CPM = ${{ matrix.cpm }}, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+        cpm: ["True", "False"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: pip install pandas numpy openpyxl matplotlib seaborn scipy frictionless
+
+      - name: Prepare the run
+        run: |
+          cp document/manual_exclusions_format.csv data_raw/manual_exclusions.csv
+          sed -i "s/^CPM = True$/CPM = ${{ matrix.cpm }}/" run_all_merge.py
+          grep -n "^CPM = " run_all_merge.py
+
+      - name: Run the pipeline on the sample data
+        run: python run_all_merge.py 2>&1 | tee run.log
+
+      - name: Check the outputs
+        run: |
+          grep -q "final N = 2" run.log
+          test -f data_output/hospital_energy_benchmarking_2.csv
+          test -f data_output/preprocessing_counts.xlsx
+          test -f data_output/table4_data_quality_2.xlsx
+          test -f data_output/column_statistics_2.xlsx
+          test -f figures/fig8_external_benchmarks.png
+
+      - name: Validate the release against the table schema
+        run: frictionless validate data_output/hospital_energy_benchmarking_2.csv --schema document/table_schema.json

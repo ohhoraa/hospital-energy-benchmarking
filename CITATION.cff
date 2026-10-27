@@ -14,8 +14,8 @@ authors:
     given-names: Jihyun
     affiliation: "Ajou University"
     orcid: "https://orcid.org/0000-0003-3011-1601"
-version: v1.1.0
-date-released: "2026-09-11"
+version: v2.0.0
+date-released: "2026-10-27"
 doi: 10.5281/zenodo.22139783
 license: MIT
 repository-code: "https://github.com/ohhoraa/hospital-energy-benchmarking"

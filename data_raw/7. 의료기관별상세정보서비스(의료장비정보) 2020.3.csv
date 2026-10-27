@@ -1,0 +1,20 @@
+암호화YKIHO코드,요양기관명,장비코드,장비코드명,장비대수
+SAMPLE_YKIHO_B,Sample hospital B,D212,체외충격파쇄석기,1
+SAMPLE_YKIHO_B,Sample hospital B,B201,양전자단층촬영기 (PET),1
+SAMPLE_YKIHO_B,Sample hospital B,B301,MRI,3
+SAMPLE_YKIHO_B,Sample hospital B,D214,혈액투석을위한인공신장기,44
+SAMPLE_YKIHO_B,Sample hospital B,B403,종양치료기 (Gamma Knife),1
+SAMPLE_YKIHO_B,Sample hospital B,B108,CT,5
+SAMPLE_YKIHO_B,Sample hospital B,B203,골밀도검사기,2
+SAMPLE_YKIHO_B,Sample hospital B,B109,콘빔CT,1
+SAMPLE_YKIHO_B,Sample hospital B,B302,초음파영상진단기,47
+SAMPLE_YKIHO_B,Sample hospital B,B105,유방촬영장치,2
+SAMPLE_YKIHO_A,Sample hospital A,B301,MRI,2
+SAMPLE_YKIHO_A,Sample hospital A,B302,초음파영상진단기,59
+SAMPLE_YKIHO_A,Sample hospital A,B203,골밀도검사기,4
+SAMPLE_YKIHO_A,Sample hospital A,B201,양전자단층촬영기 (PET),1
+SAMPLE_YKIHO_A,Sample hospital A,D212,체외충격파쇄석기,1
+SAMPLE_YKIHO_A,Sample hospital A,B109,콘빔CT,1
+SAMPLE_YKIHO_A,Sample hospital A,B105,유방촬영장치,4
+SAMPLE_YKIHO_A,Sample hospital A,B108,CT,3
+SAMPLE_YKIHO_A,Sample hospital A,D214,혈액투석을위한인공신장기,104

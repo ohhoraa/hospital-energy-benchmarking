@@ -63,7 +63,7 @@ if 'year_a' not in globals():
     year_a = 2019
 
 if 'exclusion_csv' not in globals():
-    exclusion_csv = os.path.join(_BASE_DIR, 'manual_exclusions.csv')
+    exclusion_csv = os.path.join(_BASE_DIR, 'data_raw', 'manual_exclusions.csv')
 
 cfg = SCOPE_CFG[scope]
 PK = cfg['pk_col']            # key used for counting

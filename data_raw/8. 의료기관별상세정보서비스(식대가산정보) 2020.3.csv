@@ -1,0 +1,5 @@
+암호화YKIHO코드,요양기관명,유형코드,유형코드명,일반식 가산여부,산정 인원수,치료식 등급
+SAMPLE_YKIHO_B,Sample hospital B,01,영양사,Y,5,4
+SAMPLE_YKIHO_B,Sample hospital B,02,조리사,Y,3,2
+SAMPLE_YKIHO_A,Sample hospital A,01,영양사,Y,3,4
+SAMPLE_YKIHO_A,Sample hospital A,02,조리사,Y,2,

@@ -84,6 +84,27 @@ STEPS = [
 # Primary energy conversion factors (electricity / gas / district heating).
 PRI_FACTOR = {11: 2.75, 12: 1.1, 13: 0.728}
 
+# Energy source code -> suffix of the per-source component columns
+# (site_base_e, site_htg_g, site_clg_h, ...) and of the measured totals.
+SOURCE_SUFFIX = {11: 'e', 12: 'g', 13: 'h'}
+SOURCE_TOTAL = {11: 'elec', 12: 'gas', 13: 'heat'}
+
+
+def add_component_totals(df, sfx=''):
+    """site_{c}{sfx} and pri_{c}{sfx} from the per-source components, for
+    c in base / clg / htg.
+
+    The same sums as S0 makes from the billing source; S1 applies them when
+    the components are replaced with the CPM split (CPM = True). sfx is the
+    year suffix, e.g. '_2018'.
+    """
+    for c in ('base', 'clg', 'htg'):
+        df[f'site_{c}{sfx}'] = sum(df[f'site_{c}_{SOURCE_SUFFIX[e]}{sfx}']
+                                   for e in (11, 12, 13))
+        df[f'pri_{c}{sfx}'] = sum(df[f'site_{c}_{SOURCE_SUFFIX[e]}{sfx}']
+                                  * PRI_FACTOR[e] for e in (11, 12, 13))
+    return df
+
 
 # =============================================================================
 # 1. File-name rules - defined in one place only
@@ -162,7 +183,7 @@ def load_manual_exclusions_table(csv_path):
     if not os.path.exists(csv_path):
         raise FileNotFoundError(
             f'Manual exclusion list not found: {csv_path}\n'
-            f'  -> place manual_exclusions.csv next to the scripts, or pass '
+            f'  -> place manual_exclusions.csv in data_raw/, or pass '
             f'exclusion_csv from run_all_merge.py.'
         )
     ex = pd.read_csv(csv_path, encoding='utf-8-sig')
@@ -197,8 +218,7 @@ def load_manual_exclusions(csv_path):
     ykiho       : institution identifier
     list_ty     : 'mat_err' | 'dist_err' (see LIST_TYPES)
     reason_code : reason category
-    reason_en   : reason text
-    note_ko     : free-text note, not read by the code
+    note        : free-text reason, not read by the code
 
     Returns
     -------

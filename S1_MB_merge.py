@@ -6,7 +6,8 @@ Scope : HIRA match_level == 'CASE101'
         one institution matched to one master building record, which in turn
         covers several member building records -> Multiple Buildings (MB)
 
-Merge order : master building record + HIRA -> CPM -> energy -> weather,
+Merge order : master building record + HIRA -> CPM -> energy -> weather
+              (CPM = True: energy -> weather, then the CPM is fitted here),
               plus the member building records aggregated to the master record
 Primary key : mgm_upper_bld_pk
 Output      : '{date} df_MB_merge_before_preprocessing {hira}_{yb}_{ya}.xlsx'
@@ -53,6 +54,16 @@ if 'year_b' not in globals():
 if 'year_a' not in globals():
     year_a = 2019
 
+# CPM option (CPM in run_all_merge.py). True: the change-point models are fitted
+# here with BE-sig after the merge (cpm_besig.attach_cpm), on the S0 monthly
+# series, instead of being joined from the *_CPM results.
+if 'cpm' not in globals():
+    cpm = True
+if 'third_party_dir' not in globals():
+    third_party_dir = os.path.join(_BASE_DIR, 'third_party')
+if 'n_jobs' not in globals():
+    n_jobs = None
+
 datanm_1 = step_filename(SCOPE, 'before_preprocessing', date, hira, year_b, year_a)
 
 
@@ -65,6 +76,9 @@ if 'raw_up_bld_file' not in globals():
     raw_up_bld_file = 'bld_recap_title_delimiter_bar_euckr.txt'
 if 'raw_purps_path' not in globals():
     raw_purps_path = os.path.join(data_dir, f'{date} pu_rat.txt')
+
+if 'parking_file' not in globals():
+    parking_file = None
 
 if 'raw_bld' not in globals():
     raw_bld = pd.read_csv(os.path.join(data_dir_in, raw_bld_file),
@@ -133,9 +147,21 @@ pk_cmp = fac[fac['match_level'] == SCOPE_CFG[SCOPE]['match_level']]   # CASE101
 energy_pair = pd.read_csv(
     os.path.join(data_dir, f'after_master-energy_{year_b}_{year_a}.csv'),
     encoding='utf-8-sig')
-cpm_pair = pd.read_csv(
-    os.path.join(data_dir, f'after_master-cpm_{year_b}_{year_a}.csv'),
-    encoding='utf-8-sig')
+if cpm:
+    cpm_pair = None
+    # S0 monthly series, read once and kept by run_all_merge for the next runs.
+    if 'monthly_master' not in globals():
+        monthly_master = pd.read_csv(
+            os.path.join(data_dir, 'after_master-monthly.csv'),
+            encoding='utf-8-sig',
+            dtype={'key': str, 'engy_kind_cd': str, 'use_ym': str},
+            # Exact round trip of the kWh values: the default parser can
+            # change the last digit, and the fitted coefficients respond to it.
+            float_precision='round_trip')
+else:
+    cpm_pair = pd.read_csv(
+        os.path.join(data_dir, f'after_master-cpm_{year_b}_{year_a}.csv'),
+        encoding='utf-8-sig')
 
 weather = pd.read_csv(os.path.join(data_dir, 'after_weather.csv'),
                       encoding='utf-8-sig')
@@ -161,10 +187,12 @@ def merge_upbld(base_df, df_cpm, df_en, df_w, on_key):
     """Merge CPM -> energy -> weather and report the counts at each step."""
     print('\n--- merge ---')
 
-    df = pd.merge(base_df, df_cpm.drop(columns='sido_cd', errors='ignore'),
-                  on=on_key, how='inner')
-    print(f'after CPM      mgm_upper_bld_pk: {df["mgm_upper_bld_pk"].nunique()} / '
-          f'{YKIHO}: {df[YKIHO].nunique()}')
+    df = base_df
+    if df_cpm is not None:      # CPM = False; with True it is fitted after the merge
+        df = pd.merge(df, df_cpm.drop(columns='sido_cd', errors='ignore'),
+                      on=on_key, how='inner')
+        print(f'after CPM      mgm_upper_bld_pk: {df["mgm_upper_bld_pk"].nunique()} / '
+              f'{YKIHO}: {df[YKIHO].nunique()}')
 
     df = pd.merge(df, df_en, on=on_key, how='inner')
     print(f'after energy   mgm_upper_bld_pk: {df["mgm_upper_bld_pk"].nunique()} / '
@@ -189,6 +217,17 @@ print(f'mgm_upper_bld_pk {merge0["mgm_upper_bld_pk"].nunique()} / '
 
 df_merge0 = merge_upbld(merge0, cpm_pair, energy_pair, weather,
                         on_key='mgm_upper_bld_pk')
+
+# CPM = True: fit the change-point models of the buildings left here, two
+# years at a time, and add them (see cpm_besig.attach_cpm).
+if cpm:
+    import cpm_besig
+    df_merge0 = cpm_besig.attach_cpm(
+        df_merge0, 'mgm_upper_bld_pk', monthly_master, (year_b, year_a),
+        third_party_dir, n_jobs=n_jobs,
+        out_csv=os.path.join(data_dir, f'cpm_besig_MB_{year_b}_{year_a}.csv'))
+    print(f'after CPM fit  mgm_upper_bld_pk: {df_merge0["mgm_upper_bld_pk"].nunique()} / '
+          f'{YKIHO}: {df_merge0[YKIHO].nunique()}')
 
 
 # =============================================================================
@@ -260,6 +299,18 @@ df_merge0['grnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
 _s = df_bld.groupby('mgm_upper_bld_pk')['ugrnd_flr_cnt'].max()
 df_merge0['ugrnd_flr_max'] = (df_merge0['mgm_upper_bld_pk']
                               .map(_s).astype('Int64'))
+
+# Optional: parking area (source columns mgm_bld_pk / sido_cd /
+# parking_title_count / parking_totarea). The source names the master key
+# mgm_bld_pk, as elsewhere. Left join; no match = no parking = 0.
+if parking_file:
+    _park = (pd.read_csv(os.path.join(data_dir_in, parking_file),
+                         delimiter='|', encoding='cp949')
+             .rename(columns={'mgm_bld_pk': 'mgm_upper_bld_pk'})
+             .drop(columns=['parking_title_count', 'sido_cd'], errors='ignore'))
+    df_merge0 = pd.merge(df_merge0, _park, how='left', on='mgm_upper_bld_pk')
+    df_merge0['parking_totarea'] = df_merge0['parking_totarea'].fillna(0)
+    print(f'[optional] parking_totarea merged from {parking_file}')
 
 
 # =============================================================================

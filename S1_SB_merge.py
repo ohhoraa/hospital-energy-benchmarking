@@ -8,6 +8,7 @@ Scope : HIRA match_level == 'CASE102'
 
 Merge order : building record + floor summary (pu_rat) + HIRA
               -> CPM -> energy -> weather
+              (CPM = True: energy -> weather, then the CPM is fitted here)
 Primary key : mgm_bld_pk
 Output      : '{date} df_SB_merge_before_preprocessing {hira}_{yb}_{ya}.xlsx'
               (the file-name rule lives in common.step_filename)
@@ -53,6 +54,16 @@ if 'year_b' not in globals():
 if 'year_a' not in globals():
     year_a = 2019
 
+# CPM option (CPM in run_all_merge.py). True: the change-point models are fitted
+# here with BE-sig after the merge (cpm_besig.attach_cpm), on the S0 monthly
+# series, instead of being joined from the *_CPM results.
+if 'cpm' not in globals():
+    cpm = True
+if 'third_party_dir' not in globals():
+    third_party_dir = os.path.join(_BASE_DIR, 'third_party')
+if 'n_jobs' not in globals():
+    n_jobs = None
+
 datanm_1 = step_filename(SCOPE, 'before_preprocessing', date, hira, year_b, year_a)
 
 
@@ -68,6 +79,9 @@ if 'raw_purps_path' not in globals():
 if 'raw_bld' not in globals():
     raw_bld = pd.read_csv(os.path.join(data_dir_in, raw_bld_file),
                           delimiter='|', encoding='cp949')
+
+if 'parking_file' not in globals():
+    parking_file = None
 
 # Floor summary aggregation produced by pu_rat.py.
 #   pu_rat = medical-use floor area / (total floor area - parking) * 100
@@ -121,9 +135,21 @@ pk_ind = fac[fac['match_level'] == SCOPE_CFG[SCOPE]['match_level']]   # CASE102
 energy_pair = pd.read_csv(
     os.path.join(data_dir, f'after_building-energy_{year_b}_{year_a}.csv'),
     encoding='utf-8-sig')
-cpm_pair = pd.read_csv(
-    os.path.join(data_dir, f'after_building-cpm_{year_b}_{year_a}.csv'),
-    encoding='utf-8-sig')
+if cpm:
+    cpm_pair = None
+    # S0 monthly series, read once and kept by run_all_merge for the next runs.
+    if 'monthly_building' not in globals():
+        monthly_building = pd.read_csv(
+            os.path.join(data_dir, 'after_building-monthly.csv'),
+            encoding='utf-8-sig',
+            dtype={'key': str, 'engy_kind_cd': str, 'use_ym': str},
+            # Exact round trip of the kWh values: the default parser can
+            # change the last digit, and the fitted coefficients respond to it.
+            float_precision='round_trip')
+else:
+    cpm_pair = pd.read_csv(
+        os.path.join(data_dir, f'after_building-cpm_{year_b}_{year_a}.csv'),
+        encoding='utf-8-sig')
 
 weather = pd.read_csv(os.path.join(data_dir, 'after_weather.csv'),
                       encoding='utf-8-sig')
@@ -148,10 +174,12 @@ def merge_bld(base_df, df_cpm, df_en, df_w, on_key):
     """
     print('\n--- merge ---')
 
-    df = pd.merge(base_df, df_cpm.drop(columns='sido_cd', errors='ignore'),
-                  on=on_key, how='inner')
-    print(f'after CPM      mgm_bld_pk: {df["mgm_bld_pk"].nunique()} / '
-          f'{YKIHO}: {df[YKIHO].nunique()}')
+    df = base_df
+    if df_cpm is not None:      # CPM = False; with True it is fitted after the merge
+        df = pd.merge(df, df_cpm.drop(columns='sido_cd', errors='ignore'),
+                      on=on_key, how='inner')
+        print(f'after CPM      mgm_bld_pk: {df["mgm_bld_pk"].nunique()} / '
+              f'{YKIHO}: {df[YKIHO].nunique()}')
 
     df = pd.merge(df, df_en, on=on_key, how='inner')
     print(f'after energy   mgm_bld_pk: {df["mgm_bld_pk"].nunique()} / '
@@ -173,6 +201,17 @@ print(f'mgm_bld_pk {merge0["mgm_bld_pk"].nunique()} / '
       f'{YKIHO} {merge0[YKIHO].nunique()}')
 
 df_merge0 = merge_bld(merge0, cpm_pair, energy_pair, weather, on_key='mgm_bld_pk')
+
+# CPM = True: fit the change-point models of the buildings left here, two
+# years at a time, and add them (see cpm_besig.attach_cpm).
+if cpm:
+    import cpm_besig
+    df_merge0 = cpm_besig.attach_cpm(
+        df_merge0, 'mgm_bld_pk', monthly_building, (year_b, year_a),
+        third_party_dir, n_jobs=n_jobs,
+        out_csv=os.path.join(data_dir, f'cpm_besig_SB_{year_b}_{year_a}.csv'))
+    print(f'after CPM fit  mgm_bld_pk: {df_merge0["mgm_bld_pk"].nunique()} / '
+          f'{YKIHO}: {df_merge0[YKIHO].nunique()}')
 
 
 # =============================================================================
@@ -204,6 +243,18 @@ df_merge0 = df_merge0.rename(columns={
 #   Int64 so that the S3 concatenation with MB, which is nullable for the same
 #   reason, does not fall back to float.
 df_merge0['ugrnd_flr_max'] = df_merge0['ugrnd_flr_max'].astype('Int64')
+
+# Optional: parking area (source columns mgm_bld_pk / sido_cd /
+# parking_floor_count / parking_totarea). Left join, so no record is lost; a
+# building without a match has no parking, hence 0. Not used by any filter.
+if parking_file:
+    _park = pd.read_csv(os.path.join(data_dir_in, parking_file),
+                        delimiter='|', encoding='cp949')
+    _park = _park.drop(columns=['parking_floor_count', 'sido_cd'],
+                       errors='ignore')
+    df_merge0 = pd.merge(df_merge0, _park, how='left', on='mgm_bld_pk')
+    df_merge0['parking_totarea'] = df_merge0['parking_totarea'].fillna(0)
+    print(f'[optional] parking_totarea merged from {parking_file}')
 
 
 # =============================================================================

@@ -1,13 +1,9 @@
 # ---------------------------------------------------------------------------
-# Source data and everything derived from it.
-#   None of it is distributable. data_raw/ holds the delivered sources, the
-#   other two hold what the pipeline writes from them; the intermediate files
-#   still carry identifiers, addresses and matching metadata.
-#   The one exception is the metering-unit conversion table, which the README
-#   says ships with the code.
+# Pipeline outputs.
+#   data_raw/ is tracked: it holds the metering-unit conversion table and the
+#   two-institution sample described in the README. The folders below hold
+#   what the pipeline writes.
 # ---------------------------------------------------------------------------
-data_raw/*
-!data_raw/공통코드.xlsx
 data_prepared/
 data_output/
 figures/
@@ -24,6 +20,17 @@ manual_exclusions_test.csv
 # Personal working notes kept alongside the code but not part of the release.
 # ---------------------------------------------------------------------------
 _*.md
+
+# ---------------------------------------------------------------------------
+# Figures made only for the response to reviewers; not part of the release
+# pipeline and not wired into run_all_merge.py.
+# ---------------------------------------------------------------------------
+response_figure.py
+
+# ---------------------------------------------------------------------------
+# BE-sig, downloaded at the pinned commit on the first run with CPM = True.
+# ---------------------------------------------------------------------------
+third_party/
 
 # ---------------------------------------------------------------------------
 # Python

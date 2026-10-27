@@ -15,8 +15,8 @@ Run with:
 Files
 -----
   common.py               shared constants, helpers and file-name rules
+  cpm_besig.py            change-point models fitted with BE-sig (CPM = True)
   counter.py              step-by-step record counts
-  manual_exclusions.csv   institutions removed by the manual check
   pu_rat.py               floor summary -> primary use area ratio (S1 input)
   S0_data_prep.py
   S1_SB_merge.py / S1_MB_merge.py
@@ -28,22 +28,13 @@ Files
 Folders
 -------
   data_raw/        source data (not distributed; see README.md)
+  third_party/     BE-sig, downloaded on the first run with CPM = True
   data_prepared/   intermediate outputs the stages exchange
-  data_output/     released CSV, column dictionary, step-count table,
+  data_output/     released CSV, column statistics, step-count table,
                    data-quality table
   figures/         technical-validation figures
-
-Settings
---------
-  YEAR_PAIRS   sub-periods to process
-  RUN_PU_RAT   recompute the primary use area ratio (reads the ~4 GB floor
-               summary source; set it to False on later runs to reuse the output)
-  RUN_S0 .. RUN_S3, RUN_COUNT_EXPORT, RUN_PAPER_FIGURE, RUN_EDA_VALIDATION
-               Any stage can be enabled on its own: a later stage reads the
-               files an earlier run left in data_prepared / data_output rather
-               than requiring the earlier stage in the same run.
-  SAVE_*       optional outputs; the files the stages exchange are
-               always written
+  document/        column dictionary, table schema and manual exclusion
+                   template (shipped with the repository)
 """
 
 import os
@@ -76,12 +67,33 @@ PU_RAT_FILE = f'{DATE} pu_rat.txt'
 RAW_PURPS_PATH = os.path.join(DATA_PREPARED, PU_RAT_FILE)
 
 # Institutions removed by the manual distribution check.
-EXCLUSION_CSV = os.path.join(BASE_DIR, 'manual_exclusions.csv')
+EXCLUSION_CSV = os.path.join(DATA_RAW, 'manual_exclusions.csv')
+
+# Optional sources merged in S1, per scope, inside data_raw/.
+OPTIONAL_SOURCES = {
+    'parking': {'SB': '전국-의료시설-표제부-KICT_주차장면적.csv',
+                'MB': '전국-의료시설-총괄표제부-KICT_주차장면적.csv'},
+}
+
+# Where BE-sig is downloaded to (CPM = True).
+THIRD_PARTY = os.path.join(BASE_DIR, 'third_party')
 
 
 # -------------------------------------------------------------------------
 # Run settings
 # -------------------------------------------------------------------------
+# Change-point models (see the header and README.md).
+#   True  : fitted in S1 with BE-sig  -> the released dataset
+#   False : change-point results prepared separately
+CPM = True
+
+# Optional sources merged in S1 (OPTIONAL_SOURCES above). They add columns to
+# the intermediate files only; the released dataset does not carry them.
+#   parking : parking_totarea (KICT parking area)
+MERGE_OPTIONAL = {
+    'parking': False,
+}
+
 YEAR_PAIRS = [
     (2018, 2019),
     (2020, 2021),
@@ -109,7 +121,7 @@ RUN_EDA_VALIDATION = True
 #     before_preprocessing (S1) / after_outlier (S2) / final_* (S3 A and B)
 #   Everything below is optional.
 SAVE_RELEASE_CSV = True         # hospital_energy_benchmarking_{N}.csv
-SAVE_COLUMN_DICT = True         # column_dictionary_{N}.xlsx
+SAVE_COLUMN_STATS = True        # column_statistics_{N}.xlsx
 SAVE_PU_RAT_LOG = True          # {DATE} pu_rat_log.txt
 
 # Step-count table.
@@ -158,9 +170,9 @@ def _run_script(script_name, init_globals):
 # demand sources it will never open.
 HIRA_FILES = [
     '1. 병원정보서비스 2020.3.csv',                             # institutional info
-    '3. 의료기관별상세정보서비스(시설정보) 2020.3.csv',            # facility info (beds)
-    '5. 의료기관별상세정보서비스(진료과목정보) 2020.3.csv',        # departments
-    '7. 의료기관별상세정보서비스(의료장비정보) 2020.3.csv',        # equipment
+    '3. 의료기관별상세정보서비스(시설정보) 2020.3.csv',            # facility info. (beds)
+    '5. 의료기관별상세정보서비스(진료과목정보) 2020.3.csv',        # departments info.
+    '7. 의료기관별상세정보서비스(의료장비정보) 2020.3.csv',        # equipment info.
     '8. 의료기관별상세정보서비스(식대가산정보) 2020.3.csv',        # meal-service staffing
 ]
 
@@ -174,10 +186,11 @@ def _required_sources():
 
     if RUN_S0:
         s0 = ['공통코드.xlsx', '전국-의료기관건축물대장매칭.csv',
-              '전국-의료시설-표제부-KICT_CPM.csv',
-              '전국-의료시설-총괄표제부-KICT_CPM.csv',
               '데이터넷3_SQI_건축물대장지역별_기상관측지점_매칭.csv',
               '데이터넷3_SQI_종관기상관측-월별냉난방도일.csv']
+        if not CPM:
+            s0 += ['전국-의료시설-표제부_CPM.csv',
+                   '전국-의료시설-총괄표제부_CPM.csv']
         years = sorted({y for pair in YEAR_PAIRS for y in pair})
         for year in years:
             for token in ('표제부', '총괄표제부'):
@@ -187,6 +200,9 @@ def _required_sources():
 
     if RUN_S1:
         req['S1'] = [RAW_BLD_FILE, RAW_UP_BLD_FILE]
+        for name, on in MERGE_OPTIONAL.items():
+            if on:
+                req['S1'] += list(OPTIONAL_SOURCES[name].values())
 
     return req
 
@@ -255,8 +271,8 @@ def preflight_exclusions():
     print(f'\n[preflight] manual exclusion list')
     if not os.path.exists(EXCLUSION_CSV):
         print(f'  [MISSING] {EXCLUSION_CSV}', flush=True)
-        print(f'  -> copy manual_exclusions_format.csv to '
-              f'manual_exclusions.csv, replace the example rows with your own '
+        print(f'  -> copy document/manual_exclusions_format.csv to '
+              f'data_raw/manual_exclusions.csv, replace the example rows with your own '
               f'list, and re-run (see README.md).', flush=True)
         raise FileNotFoundError(
             f'Manual exclusion list not found: {EXCLUSION_CSV}')
@@ -299,13 +315,14 @@ def run_s0():
 
     The year loop is inside the script, so it runs once.
     """
-    _print_banner('STEP S0: data preparation')
+    _print_banner(f'STEP S0: data preparation (CPM = {CPM})')
     t0 = time.time()
     _run_script('S0_data_prep.py', {
         'data_dir_in': DATA_RAW,
         'data_dir': DATA_PREPARED,
         'hira': HIRA,
         'year_pairs': YEAR_PAIRS,
+        'cpm': CPM,
     })
     print(f'[S0] done ({time.time() - t0:.1f}s)', flush=True)
 
@@ -315,10 +332,13 @@ def run_s0():
 # -------------------------------------------------------------------------
 def _s0_output_paths():
     files = [f'after_hira_{HIRA}.csv', 'after_weather.csv']
-    for yb, ya in YEAR_PAIRS:
-        for token in ('master', 'building'):
+    for token in ('master', 'building'):
+        if CPM:
+            files.append(f'after_{token}-monthly.csv')
+        for yb, ya in YEAR_PAIRS:
             files.append(f'after_{token}-energy_{yb}_{ya}.csv')
-            files.append(f'after_{token}-cpm_{yb}_{ya}.csv')
+            if not CPM:
+                files.append(f'after_{token}-cpm_{yb}_{ya}.csv')
     return [os.path.join(DATA_PREPARED, f) for f in files]
 
 
@@ -348,6 +368,7 @@ def preflight_s1():
             f'Primary use area ratio output missing: {RAW_PURPS_PATH}\n'
             f'  -> set RUN_PU_RAT = True and run again.'
         )
+
     print('[preflight] S1 inputs present', flush=True)
 
 
@@ -372,6 +393,8 @@ def run_s1():
         'raw_bld_file': RAW_BLD_FILE,
         'raw_up_bld_file': RAW_UP_BLD_FILE,
         'raw_purps_path': RAW_PURPS_PATH,
+        'cpm': CPM,
+        'third_party_dir': THIRD_PARTY,
     }
 
     for year_b, year_a in YEAR_PAIRS:
@@ -381,11 +404,16 @@ def run_s1():
             print(f'\n[S1] {scope} {year_b}-{year_a} ...', flush=True)
 
             init_globals = dict(raw_cache)
-            init_globals.update({'year_b': year_b, 'year_a': year_a})
+            init_globals.update({
+                'year_b': year_b, 'year_a': year_a,
+                'parking_file': (OPTIONAL_SOURCES['parking'][scope]
+                                 if MERGE_OPTIONAL.get('parking') else None),
+            })
 
             result_globals = _run_script(script, init_globals)
 
-            for key in ['raw_bld', 'raw_up_bld', 'raw_purps']:
+            for key in ['raw_bld', 'raw_up_bld', 'raw_purps',
+                        'monthly_building', 'monthly_master']:
                 if key in result_globals:
                     raw_cache[key] = result_globals[key]
 
@@ -448,7 +476,7 @@ def run_s3():
         'hira': HIRA,
         'year_pairs': YEAR_PAIRS,
         'save_release_csv': SAVE_RELEASE_CSV,
-        'save_column_dict': SAVE_COLUMN_DICT,
+        'save_column_stats': SAVE_COLUMN_STATS,
     })
     _RELEASE_CSV = _g.get('rel_csv')
     print(f'[S3] done ({time.time() - t0:.1f}s)', flush=True)

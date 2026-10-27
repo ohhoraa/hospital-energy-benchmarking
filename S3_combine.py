@@ -9,7 +9,7 @@ Part B. Join the sub-periods   : 2018_2019 inner join 2020_2021 on the
                                  -> '{date} final_{step} {hira}_all.xlsx'
 Part C. Release view           : from after_outlier, the released CSV with the
                                  released variable names, plus its column
-                                 dictionary -> data_output/
+                                 statistics -> data_output/
 
 Parts A and B write to data_prepared/; Part C writes to data_output/.
 
@@ -58,47 +58,35 @@ if 'year_pairs' not in globals():
 # Optional outputs. The stage-to-stage files (final_*) are always written.
 if 'save_release_csv' not in globals():
     save_release_csv = True
-if 'save_column_dict' not in globals():
-    save_column_dict = True
+if 'save_column_stats' not in globals():
+    save_column_stats = True
 
 
 # =============================================================================
-# 1. Column dictionary
+# 1. Column statistics
 # =============================================================================
-def build_column_dictionary(dataframe):
-    """Return a column dictionary for the released file.
+# The column definitions are in document/ (column_dictionary.xlsx,
+# table_schema.json).
 
-    Columns: idx / name / description (blank) / dtype / max length /
-             nullable / null count / distinct count / sample / note (blank).
-    Descriptions and notes are filled in by hand for the data repository.
-    """
+
+def build_column_statistics(dataframe):
+    """Statistics of each column in this release (they change with N)."""
     rows = []
     for i, col in enumerate(dataframe.columns):
         s = dataframe[col]
         non_null = s.dropna()
-        max_len = int(non_null.astype(str).str.len().max()) if len(non_null) else 0
         rows.append({
-            'idx': i,
-            'column': col,
-            'description': '',
+            'idx': i, 'column': col,
             'dtype': str(s.dtype),
-            'max_length': max_len,
+            'max_length': (int(non_null.astype(str).str.len().max())
+                           if len(non_null) else 0),
             'nullable': 'Y' if s.isnull().any() else 'N',
             'null_count': int(s.isnull().sum()),
             'distinct_count': int(s.nunique(dropna=True)),
             'sample': s.iloc[0] if len(s) else None,
-            'note': '',
         })
-    return pd.DataFrame(rows, columns=[
-        'idx', 'column', 'description', 'dtype', 'max_length',
-        'nullable', 'null_count', 'distinct_count', 'sample', 'note',
-    ])
+    return pd.DataFrame(rows)
 
-
-def save_column_dictionary(dataframe, save_path):
-    build_column_dictionary(dataframe).to_excel(save_path, index=False)
-    print(f'[save] {os.path.basename(save_path)}')
-    return save_path
 
 
 # =============================================================================
@@ -150,7 +138,7 @@ print(f'\n{"=" * 70}\n[S3] Part B: sub-period inner join\n{"=" * 70}')
 # Every other unsuffixed column (register and HIRA attributes, totarea_adj,
 # flr_*) has the same value in both sub-periods and is de-duplicated.
 CPM_BASES = ('cpm_ty', 'b0', 'b1', 'b2', 'b3', 'b4',
-             'ns', 'cvrmse', 'rmse', 'nmbe', 'r2', 'r2_l', 'r2_r')
+             'ns', 'cvrmse', 'rmse', 'nmbe', 'r2')
 _CPM_RE = re.compile(r'^(' + '|'.join(CPM_BASES) + r')_\d+$')
 
 
@@ -346,12 +334,12 @@ else:
     else:
         print('[skip] release CSV (SAVE_RELEASE_CSV = False)')
 
-    if save_column_dict:
-        save_column_dictionary(
-            df_release,
-            os.path.join(output_dir, f'column_dictionary_{n_rel}.xlsx'))
+    if save_column_stats:
+        st = os.path.join(output_dir, f'column_statistics_{n_rel}.xlsx')
+        build_column_statistics(df_release).to_excel(st, index=False)
+        print(f'[save] {os.path.basename(st)}')
     else:
-        print('[skip] column dictionary (SAVE_COLUMN_DICT = False)')
+        print('[skip] column statistics (SAVE_COLUMN_STATS = False)')
 
     print(f'\n{"=" * 70}')
     print(f'[check] final N = {n_rel:,}')

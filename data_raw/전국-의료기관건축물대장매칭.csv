@@ -1,0 +1,7 @@
+base_yyyy|place_code|place_name|input_addr|clean_addr|sigungu_cd|bjdong_cd|plat_gb_cd|bun|ji|na_road_cd|na_main_bun|na_sub_bun|plat_addr|road_plat_addr|match_mgm_upper_bld_pks|match_mgm_bld_pks|match_grade|match_level|sido_cd
+2020|SAMPLE_YKIHO_B|Sample hospital B|Sample address B|Sample address B|31710|31028|0|0001|0000|317100000000|1|0|Sample address B|Sample address B|31710-9000102|31710-9000101,31710-9000103|M1|CASE101|31
+2020|SAMPLE_YKIHO_A|Sample hospital A|Sample address A|Sample address A|43800|31042|0|0001|0000|438000000000|1|0|Sample address A|Sample address A||43800-9000001|M1|CASE102|43
+2021|SAMPLE_YKIHO_B|Sample hospital B|Sample address B|Sample address B|31710|31028|0|0001|0000|317100000000|1|0|Sample address B|Sample address B|31710-9000102|31710-9000101,31710-9000103|M1|CASE101|31
+2022|SAMPLE_YKIHO_A|Sample hospital A|Sample address A|Sample address A|43800|31042|0|0001|0000|438000000000|1|0|Sample address A|Sample address A||43800-9000001|M1|CASE102|43
+2022|SAMPLE_YKIHO_B|Sample hospital B|Sample address B|Sample address B|31710|31028|0|0001|0000|317100000000|1|0|Sample address B|Sample address B|31710-9000102|31710-9000101,31710-9000103|M1|CASE101|31
+2021|SAMPLE_YKIHO_A|Sample hospital A|Sample address A|Sample address A|43800|31042|0|0001|0000|438000000000|1|0|Sample address A|Sample address A||43800-9000001|M1|CASE102|43
