@@ -1,5 +1,5 @@
 {
-  "title": "Nationwide building energy benchmarking dataset for medical institutions in South Korea",
+  "title": "A nationwide dataset of energy consumption and operational characteristics for South Korean medical institutions",
   "description": "Column definitions of energy_benchmarking_{N}.csv",
   "fields": [
     {

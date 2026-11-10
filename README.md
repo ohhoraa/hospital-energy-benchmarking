@@ -1,12 +1,12 @@
-# A nationwide building energy benchmarking dataset for medical institutions in South Korea
+# A nationwide dataset of energy consumption and operational characteristics for South Korean medical institutions
 
 [![tests](https://github.com/ohhoraa/hospital-energy-benchmarking/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/ohhoraa/hospital-energy-benchmarking/actions/workflows/test.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139783.svg)](https://doi.org/10.5281/zenodo.22139783)
 
 Python code that builds an institution-level panel (2018–2021) of South Korean
-inpatient medical institutions from three administrative datasets (building
+inpatient care institutions from three administrative datasets (building
 registry, energy consumption, medical institution information) and two DataNet
-tables (address-based matching table, station-based degree-day table).
+tables (address-based matching table, station-based monthly degree-day table).
 
 ## Requirements
 
@@ -37,7 +37,7 @@ present. Flags at the top of `run_all_merge.py` switch individual stages
 | Step | Script | Input | Output |
 |---|---|---|---|
 | 1 | `pu_rat.py` | floor summary records | primary-use area ratio per building record |
-| 2 | `S0_data_prep.py` | calendarized monthly billing (converted to kWh), HIRA sub-datasets, degree-day table | annual energy, monthly series for the CPMs, one record per institution |
+| 2 | `S0_data_prep.py` | calendarized monthly billing (converted to kWh), HIRADB sub-datasets, degree-day table | annual energy, monthly series for the CPMs, one record per institution |
 | 3 | `S1_SB_merge.py`, `S1_MB_merge.py` → `cpm_besig.py` | step 2, matching table | integrated tables per configuration, with CPMs fitted and disaggregated |
 | 4 | `S2_clean.py` | step 3, `manual_exclusions.csv` | filtered and screened tables |
 | 5 | `S3_combine.py` | step 4 | `energy_benchmarking_{N}.csv`, `cpm_results_{N}.csv` |
@@ -54,7 +54,8 @@ with the CPM tool [5]:
 - multistart optimizer with 10 starting points (seed 0); the model with the
   lowest RMSE (n − p degrees of freedom) is selected
 - default parameter bounds: baseload between the minimum and maximum monthly
-  consumption, slopes ≥ 0, change-point temperatures between 0 and 25 ℃, and
+  consumption, heating and cooling sensitivities ≥ 0, change-point temperatures
+  between 0 and 25 ℃, and
   for 5p the heating change-point temperature not exceeding the cooling
   change-point temperature
 - monthly mean outdoor temperature shipped with the CPM tool, from the same ASOS
@@ -99,9 +100,10 @@ used in this study:
 - **Building registry** (December 2022 release): Building HUB
   (<https://www.hub.go.kr/portal/opn/lps/idx-lgcpt-pvsn-srvc-list.do>), current
   snapshots only.
-- **Energy consumption** (meter-level, calendarized, 2018–2021): available only
-  with the approval of the Ministry of Land, Infrastructure and Transport under
-  건축물 에너지·온실가스 정보체계 운영규정. Building HUB publishes only lot-level
+- **Energy consumption** (building-level monthly, calendarized, 2018–2021):
+  aggregated from the meter-level billing records of the NBEIDB within the
+  DataNet project [2]; available only with the approval of the Ministry of Land,
+  Infrastructure and Transport under 건축물 에너지·온실가스 정보체계 운영규정. Building HUB publishes only lot-level
   electricity and gas totals, which cannot substitute for these records.
 - **Medical institution information** (March 2020 release): Public Data Portal
   (<https://www.data.go.kr/en/data/15051059/fileData.do>), current snapshots
@@ -120,7 +122,7 @@ releases; the result will differ from the released dataset.
 | `전국-의료시설-{year}-총괄표제부-사용량.csv` | energy consumption, master building records, 2018–2021 |
 | `전국-의료시설-(총괄)표제부_CPM.csv` | supplied CPM results (only for `CPM = False`) |
 | `공통코드.xlsx` | metering-unit to kWh conversion (included) |
-| `1. 병원정보서비스 2020.3.csv`, `3.`, `5.`, `7.`, `8. 의료기관별상세정보서비스(…) 2020.3.csv` | HIRA institutional, facility, department, equipment and meal-service information |
+| `1. 병원정보서비스 2020.3.csv`, `3.`, `5.`, `7.`, `8. 의료기관별상세정보서비스(…) 2020.3.csv` | HIRADB institutional, facility, department, equipment and meal-service information |
 | `전국-의료기관건축물대장매칭.csv` | address-based matching table [3] |
 | `데이터넷3_SQI_건축물대장지역별_기상관측지점_매칭.csv`, `데이터넷3_SQI_종관기상관측-월별냉난방도일.csv` | station matching and degree-day table [4] |
 
