@@ -40,7 +40,7 @@ present. Flags at the top of `run_all_merge.py` switch individual stages
 | 2 | `S0_data_prep.py` | calendarized monthly billing (converted to kWh), HIRADB sub-datasets, degree-day table | annual energy, monthly series for the CPMs, one record per institution |
 | 3 | `S1_SB_merge.py`, `S1_MB_merge.py` → `cpm_besig.py` | step 2, matching table | integrated tables per configuration, with CPMs fitted and disaggregated |
 | 4 | `S2_clean.py` | step 3, `manual_exclusions.csv` | filtered and screened tables |
-| 5 | `S3_combine.py` | step 4 | `energy_benchmarking_{N}.csv`, `cpm_results_{N}.csv` |
+| 5 | `S3_combine.py` | step 4 | `energy_benchmarking.csv`, `cpm_results.csv` |
 | 6 | `paper_figure.py`, `eda_validation.py` | step 5 | quality-control and validation figures |
 
 ## Change-point models
@@ -65,7 +65,7 @@ The baseload, heating and cooling components split the model prediction [1], so
 they differ slightly from the measured total. `CPM = False` reads the CPM
 results supplied with the source data instead.
 
-`cpm_results_{N}.csv` names the parameters by meaning; the parameter mapping to
+`cpm_results.csv` names the parameters by meaning; the parameter mapping to
 the CPM tool's `b0` … `b4`:
 
 | column | 1p | 3p_h | 3p_c | 5p |
@@ -80,10 +80,10 @@ the CPM tool's `b0` … `b4`:
 
 | File | Contents |
 |---|---|
-| `data_output/energy_benchmarking_{N}.csv` | the released dataset |
-| `data_output/cpm_results_{N}.csv` | model type, parameters and fit statistics per institution (`idx`), subperiod and energy source |
+| `data_output/energy_benchmarking.csv` | the released dataset |
+| `data_output/cpm_results.csv` | model type, parameters and fit statistics per institution (`idx`), subperiod and energy source |
 | `data_output/preprocessing_counts.xlsx` | institutions remaining after each filtering and screening step |
-| `data_output/column_statistics_{N}.xlsx` | statistics of every released column |
+| `data_output/column_statistics.xlsx` | statistics of every released column |
 | `figures/` | figures 4–8 of the paper |
 
 Column definitions and table schemas of both CSV files are in `document/`
@@ -168,7 +168,7 @@ the Ministry of Land, Infrastructure and Transport (Grant RS-2023-00244769).
 ## Citation
 
 > Oh, J. (2026). *Dataset construction pipeline for energy benchmarking of
-> South Korean medical institutions* (v2.1.0) [Software]. Zenodo.
+> South Korean medical institutions* (v2.2.0) [Software]. Zenodo.
 > https://doi.org/10.5281/zenodo.22139783
 
 ## License

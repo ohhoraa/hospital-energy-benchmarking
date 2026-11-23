@@ -86,7 +86,7 @@ def build_column_statistics(dataframe):
     return pd.DataFrame(rows)
 
 
-# Change-point model parameters: cpm_results_{N}.csv, one row per
+# Change-point model parameters: cpm_results.csv, one row per
 # institution x subperiod x energy source. Definitions in
 # document/cpm_results_schema.json.
 PARAM_COLS = ['idx', 'subperiod', 'source', 'cpm_ty',
@@ -371,10 +371,9 @@ else:
     print(f'[release] {n_rel:,} rows, {df_release.shape[1]} cols')
 
     if save_release_csv:
-        rel_csv = os.path.join(output_dir,
-                               f'energy_benchmarking_{n_rel}.csv')
+        rel_csv = os.path.join(output_dir, 'energy_benchmarking.csv')
         df_release.to_csv(rel_csv, index=False, encoding='utf-8-sig')
-        par_csv = os.path.join(output_dir, f'cpm_results_{n_rel}.csv')
+        par_csv = os.path.join(output_dir, 'cpm_results.csv')
         df_param.to_csv(par_csv, index=False, encoding='utf-8-sig')
         print(f'[save] {os.path.basename(rel_csv)}, '
               f'{os.path.basename(par_csv)} ({len(df_param):,} rows)')
@@ -382,7 +381,7 @@ else:
         print('[skip] release CSV (SAVE_RELEASE_CSV = False)')
 
     if save_column_stats:
-        st = os.path.join(output_dir, f'column_statistics_{n_rel}.xlsx')
+        st = os.path.join(output_dir, 'column_statistics.xlsx')
         build_column_statistics(df_release).to_excel(st, index=False)
         print(f'[save] {os.path.basename(st)}')
     else:

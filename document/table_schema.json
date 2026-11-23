@@ -1,6 +1,6 @@
 {
   "title": "A nationwide dataset of energy consumption and operational characteristics for South Korean medical institutions",
-  "description": "Column definitions of energy_benchmarking_{N}.csv",
+  "description": "Column definitions of energy_benchmarking.csv",
   "fields": [
     {
       "name": "idx",
@@ -839,6 +839,6 @@
   "notes": [
     "All energy and weather variables are calendar-year totals (January-December), provided for 2018-2021 with the year as a suffix (e.g., site_sum_2018).",
     "Because the disaggregated components are CPM estimates, site_base + site_htg + site_clg and pri_base + pri_htg + pri_clg differ slightly from site_sum and pri_sum, respectively.",
-    "The change-point model fitted to each energy source and two-year subperiod (model type, parameters and fit statistics) is in cpm_results_{N}.csv, linked to this file by idx."
+    "The change-point model fitted to each energy source and two-year subperiod (model type, parameters and fit statistics) is in cpm_results.csv, linked to this file by idx."
   ]
 }

@@ -121,8 +121,8 @@ RUN_EDA_VALIDATION = True
 #   Always written, because the stages read them from one another:
 #     before_preprocessing (S1) / after_outlier (S2) / final_* (S3 A and B)
 #   Everything below is optional.
-SAVE_RELEASE_CSV = True         # energy_benchmarking_{N}.csv
-SAVE_COLUMN_STATS = True        # column_statistics_{N}.xlsx
+SAVE_RELEASE_CSV = True         # energy_benchmarking.csv, cpm_results.csv
+SAVE_COLUMN_STATS = True        # column_statistics.xlsx
 SAVE_PU_RAT_LOG = True          # {DATE} pu_rat_log.txt
 
 # Step-count table.

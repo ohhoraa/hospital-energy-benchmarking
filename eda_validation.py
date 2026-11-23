@@ -2,13 +2,12 @@
 """
 eda_validation. Technical validation figures.
 
-Input  : data_output/energy_benchmarking_{N}.csv  (S3 Part C)
+Input  : data_output/energy_benchmarking.csv  (S3 Part C)
 Output : figures/*.png
 
 Run this through run_all_merge.py, which supplies bench_csv from S3. Run on its
-own (F5) it takes the released CSV from data_output, but only when exactly one
-is there, and it prints the file name and write time. With several released
-CSVs present it stops rather than guessing which N to validate.
+own (F5) it takes data_output/energy_benchmarking.csv and prints its write
+time.
 
 Figures (numbered as in the paper)
 ----------------------------------
@@ -74,25 +73,13 @@ YEARS = (2018, 2019, 2020, 2021)
 bench_csv = globals().get('bench_csv')
 if bench_csv is None:
     _out_dir = os.path.join(_BASE_DIR, 'data_output')
-    _cands = sorted(
-        os.path.join(_out_dir, _f)
-        for _f in (os.listdir(_out_dir) if os.path.isdir(_out_dir) else [])
-        if _f.startswith('energy_benchmarking_')
-        and _f.endswith('.csv'))
-    if len(_cands) == 1:
-        bench_csv = _cands[0]
+    _cand = os.path.join(_out_dir, 'energy_benchmarking.csv')
+    if os.path.isfile(_cand):
+        bench_csv = _cand
         _mt = datetime.datetime.fromtimestamp(os.path.getmtime(bench_csv))
         print('[eda_validation] bench_csv was not supplied - standalone run.')
         print(f'                 using {os.path.basename(bench_csv)} '
               f'(written {_mt:%Y-%m-%d %H:%M})')
-    elif len(_cands) > 1:
-        raise RuntimeError(
-            'bench_csv was not supplied and data_output holds more than one '
-            'released CSV, so the one to validate is ambiguous:\n'
-            + ''.join(f'    {os.path.basename(c)}\n' for c in _cands)
-            + '  -> delete the stale files, or set bench_csv at the top of '
-              'this file, or run through run_all_merge.py.'
-        )
     else:
         raise RuntimeError(
             'bench_csv was not supplied and no released CSV was found in '

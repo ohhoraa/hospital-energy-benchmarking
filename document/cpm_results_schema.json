@@ -1,6 +1,6 @@
 {
   "title": "Change-point model parameters",
-  "description": "Column definitions of cpm_results_{N}.csv: one row per institution (idx), two-year subperiod and energy source",
+  "description": "Column definitions of cpm_results.csv: one row per institution (idx), two-year subperiod and energy source",
   "fields": [
     {
       "name": "idx",
